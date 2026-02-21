@@ -316,6 +316,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (sender === "assistant") {
       contentDiv.innerHTML = marked.parse(message);
       addCopyButtons(contentDiv);
+      addMessageActions(contentDiv, message);
     } else {
       contentDiv.textContent = message;
     }
@@ -354,6 +355,173 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  function addMessageActions(contentDiv, message) {
+    const actionsDiv = document.createElement("div");
+    actionsDiv.className = "message-actions";
+
+    // Copy button
+    const copyBtn = document.createElement("button");
+    copyBtn.className = "message-action-btn";
+    copyBtn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+      </svg>
+      Copy
+    `;
+    copyBtn.addEventListener("click", () => {
+      navigator.clipboard.writeText(message).then(() => {
+        const originalHTML = copyBtn.innerHTML;
+        copyBtn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+          Copied!
+        `;
+        setTimeout(() => {
+          copyBtn.innerHTML = originalHTML;
+        }, 2000);
+      });
+    });
+
+    // Regenerate button
+    const regenerateBtn = document.createElement("button");
+    regenerateBtn.className = "message-action-btn";
+    regenerateBtn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="23 4 23 10 17 10"></polyline>
+        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+      </svg>
+      Regenerate
+    `;
+    regenerateBtn.addEventListener("click", () => {
+      if (isGenerating) return;
+      regenerateResponse();
+    });
+
+    // Speak button
+    const speakBtn = document.createElement("button");
+    speakBtn.className = "message-action-btn";
+    speakBtn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+        <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+        <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+      </svg>
+      Speak
+    `;
+    speakBtn.addEventListener("click", () => {
+      speakMessage(message, speakBtn);
+    });
+
+    actionsDiv.appendChild(copyBtn);
+    actionsDiv.appendChild(regenerateBtn);
+    actionsDiv.appendChild(speakBtn);
+    contentDiv.appendChild(actionsDiv);
+  }
+
+  function regenerateResponse() {
+    if (!currentChatId || isGenerating) return;
+
+    const convos = loadConversations();
+    const convo = convos[currentChatId];
+    if (!convo || convo.messages.length === 0) return;
+
+    // Find the last user message
+    let lastUserMessage = null;
+    for (let i = convo.messages.length - 1; i >= 0; i--) {
+      if (convo.messages[i].sender === "user") {
+        lastUserMessage = convo.messages[i].content;
+        break;
+      }
+    }
+
+    if (!lastUserMessage) return;
+
+    // Remove the last assistant message if it exists
+    if (
+      convo.messages.length > 0 &&
+      convo.messages[convo.messages.length - 1].sender === "assistant"
+    ) {
+      convo.messages.pop();
+      saveConversations(convos);
+
+      // Remove the last assistant message from UI
+      const messages = messagesContainer.querySelectorAll(".message.assistant");
+      if (messages.length > 0) {
+        messages[messages.length - 1].remove();
+      }
+    }
+
+    // Regenerate by sending the last user message again
+    generateResponse(lastUserMessage);
+  }
+
+  let currentSpeech = null;
+
+  function speakMessage(message, button) {
+    // Stop any ongoing speech
+    if (currentSpeech) {
+      window.speechSynthesis.cancel();
+      currentSpeech = null;
+      document
+        .querySelectorAll(".message-action-btn.speaking")
+        .forEach((btn) => {
+          btn.classList.remove("speaking");
+          btn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+          </svg>
+          Speak
+        `;
+        });
+      return;
+    }
+
+    // Create and start new speech
+    const utterance = new SpeechSynthesisUtterance(message);
+    currentSpeech = utterance;
+
+    button.classList.add("speaking");
+    button.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="6" y="4" width="4" height="16"></rect>
+        <rect x="14" y="4" width="4" height="16"></rect>
+      </svg>
+      Stop
+    `;
+
+    utterance.onend = () => {
+      currentSpeech = null;
+      button.classList.remove("speaking");
+      button.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+          <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+        </svg>
+        Speak
+      `;
+    };
+
+    utterance.onerror = () => {
+      currentSpeech = null;
+      button.classList.remove("speaking");
+      button.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+          <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+        </svg>
+        Speak
+      `;
+    };
+
+    window.speechSynthesis.speak(utterance);
+  }
+
   function addTypingIndicator() {
     const contentDiv = createMessageElement("assistant");
     const typingDiv = document.createElement("div");
@@ -390,20 +558,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (stopBtn) stopBtn.remove();
   }
 
-  async function sendMessage() {
-    const message = messageInput.value.trim();
-    if (!message || isGenerating) return;
-
-    isGenerating = true;
-    sendButton.disabled = true;
-    messageInput.value = "";
-    messageInput.style.height = "auto";
-
-    // Create conversation on first message
-    ensureConversation(message);
-
-    addMessage(message, "user");
-
+  async function generateResponse(message) {
     const typingIndicator = addTypingIndicator();
     showStopButton();
 
@@ -416,7 +571,7 @@ document.addEventListener("DOMContentLoaded", () => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "qwen3:0.6b",
+          model: "mistral:7b",
           prompt: message,
           stream: true,
         }),
@@ -461,6 +616,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Add copy buttons after streaming is complete
       addCopyButtons(contentDiv);
+      addMessageActions(contentDiv, fullResponse);
 
       // Save the full assistant response
       saveMessage("assistant", fullResponse);
@@ -482,6 +638,23 @@ document.addEventListener("DOMContentLoaded", () => {
       abortController = null;
       hideStopButton();
     }
+  }
+
+  async function sendMessage() {
+    const message = messageInput.value.trim();
+    if (!message || isGenerating) return;
+
+    isGenerating = true;
+    sendButton.disabled = true;
+    messageInput.value = "";
+    messageInput.style.height = "auto";
+
+    // Create conversation on first message
+    ensureConversation(message);
+
+    addMessage(message, "user");
+
+    await generateResponse(message);
   }
 
   // ===== Initialize on page load =====

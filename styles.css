@@ -405,10 +405,6 @@ body {
   overflow-wrap: break-word;
 }
 
-.message.assistant {
-  background: var(--bg-message-assistant);
-}
-
 /* ===== Message Content Styles ===== */
 .message-content p {
   margin: 10px 0;
@@ -622,7 +618,8 @@ body {
 .send-btn {
   position: absolute;
   right: 10px;
-  bottom: 8px;
+  top: 50%;
+  transform: translateY(-50%);
   width: 34px;
   height: 34px;
   border-radius: 10px;
@@ -633,13 +630,11 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background var(--transition), opacity var(--transition),
-    transform var(--transition);
+  transition: background var(--transition), opacity var(--transition);
 }
 
 .send-btn:hover:not(:disabled) {
   background: var(--accent-hover);
-  transform: scale(1.05);
 }
 
 .send-btn:disabled {
@@ -718,4 +713,49 @@ body {
 
 .stop-btn svg {
   flex-shrink: 0;
+}
+
+/* ===== Message Action Buttons ===== */
+.message-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 8px;
+}
+
+.message-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition), color var(--transition);
+}
+
+.message-action-btn:hover {
+  background: var(--bg-secondary);
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+
+.message-action-btn svg {
+  flex-shrink: 0;
+}
+
+.message-action-btn.speaking {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.message-action-btn.speaking:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
