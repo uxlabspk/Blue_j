@@ -319,7 +319,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const senderDiv = document.createElement("div");
     senderDiv.classList.add("message-sender");
     const displayName =
-      sender === "user" ? userSettings.username || "You" : "Ollama";
+      sender === "user" ? userSettings.username || "You" : "Blue J";
     senderDiv.textContent = displayName;
 
     const contentDiv = document.createElement("div");
@@ -660,7 +660,7 @@ document.addEventListener("DOMContentLoaded", () => {
         console.error("Error sending message:", error);
         typingIndicator.parentElement?.parentElement?.remove();
         addMessage(
-          "Failed to send message. Please check if Ollama is running.",
+          "Failed to send message. Please check if Blue J is running.",
           "assistant",
         );
       }
