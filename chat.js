@@ -6,11 +6,155 @@ document.addEventListener("DOMContentLoaded", () => {
   const sidebarClose = document.getElementById("sidebar-close");
   const sidebarOpen = document.getElementById("sidebar-open");
   const newChatBtn = document.getElementById("new-chat-btn");
-  const emptyState = document.getElementById("empty-state");
+  const sidebarConversations = document.getElementById("sidebar-conversations");
   const suggestionCards = document.querySelectorAll(".suggestion-card");
 
   let isGenerating = false;
   let abortController = null;
+  let currentChatId = null;
+
+  // ===== Conversation Storage =====
+  const STORAGE_KEY = "ollama_conversations";
+
+  function loadConversations() {
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+    } catch {
+      return {};
+    }
+  }
+
+  function saveConversations(convos) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(convos));
+  }
+
+  function generateId() {
+    return crypto.randomUUID
+      ? crypto.randomUUID()
+      : Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  }
+
+  function getChatIdFromUrl() {
+    const hash = window.location.hash;
+    if (hash && hash.startsWith("#/")) {
+      return hash.slice(2);
+    }
+    return null;
+  }
+
+  function updateUrl(chatId) {
+    if (chatId) {
+      window.history.pushState(null, "", `#/${chatId}`);
+    } else {
+      window.history.pushState(null, "", window.location.pathname);
+    }
+  }
+
+  function generateTitle(message) {
+    // Use first 40 chars of the first user message as title
+    const title =
+      message.length > 40 ? message.substring(0, 40) + "..." : message;
+    return title;
+  }
+
+  function ensureConversation(firstMessage) {
+    if (!currentChatId) {
+      currentChatId = generateId();
+      const convos = loadConversations();
+      convos[currentChatId] = {
+        id: currentChatId,
+        title: generateTitle(firstMessage),
+        messages: [],
+        createdAt: Date.now(),
+      };
+      saveConversations(convos);
+      updateUrl(currentChatId);
+      renderSidebar();
+    }
+  }
+
+  function saveMessage(sender, content) {
+    if (!currentChatId) return;
+    const convos = loadConversations();
+    if (convos[currentChatId]) {
+      convos[currentChatId].messages.push({ sender, content });
+      saveConversations(convos);
+    }
+  }
+
+  function renderSidebar() {
+    const convos = loadConversations();
+    sidebarConversations.innerHTML = "";
+
+    // Sort by createdAt descending (newest first)
+    const sorted = Object.values(convos).sort(
+      (a, b) => b.createdAt - a.createdAt,
+    );
+
+    sorted.forEach((convo) => {
+      const item = document.createElement("div");
+      item.className =
+        "conversation-item" + (convo.id === currentChatId ? " active" : "");
+      item.dataset.id = convo.id;
+
+      const titleSpan = document.createElement("span");
+      titleSpan.className = "conversation-title";
+      titleSpan.textContent = convo.title;
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.className = "conversation-delete";
+      deleteBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
+      deleteBtn.title = "Delete chat";
+      deleteBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        deleteConversation(convo.id);
+      });
+
+      item.appendChild(titleSpan);
+      item.appendChild(deleteBtn);
+
+      item.addEventListener("click", () => {
+        loadChat(convo.id);
+      });
+
+      sidebarConversations.appendChild(item);
+    });
+  }
+
+  function deleteConversation(id) {
+    const convos = loadConversations();
+    delete convos[id];
+    saveConversations(convos);
+
+    if (currentChatId === id) {
+      currentChatId = null;
+      updateUrl(null);
+      showEmptyState();
+    }
+    renderSidebar();
+  }
+
+  function showEmptyState() {
+    messagesContainer.innerHTML = "";
+    messagesContainer.appendChild(createEmptyState());
+  }
+
+  function loadChat(chatId) {
+    const convos = loadConversations();
+    const convo = convos[chatId];
+    if (!convo) return;
+
+    currentChatId = chatId;
+    updateUrl(chatId);
+    messagesContainer.innerHTML = "";
+
+    convo.messages.forEach((msg) => {
+      addMessage(msg.content, msg.sender, false); // false = don't save again
+    });
+
+    renderSidebar();
+    messageInput.focus();
+  }
 
   // Configure marked for better markdown rendering
   marked.setOptions({
@@ -54,10 +198,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ===== New Chat =====
   newChatBtn.addEventListener("click", () => {
-    messagesContainer.innerHTML = "";
-    if (emptyState) {
-      messagesContainer.appendChild(createEmptyState());
-    }
+    currentChatId = null;
+    updateUrl(null);
+    showEmptyState();
+    renderSidebar();
     messageInput.value = "";
     messageInput.style.height = "auto";
     sendButton.disabled = true;
@@ -71,6 +215,18 @@ document.addEventListener("DOMContentLoaded", () => {
       messageInput.dispatchEvent(new Event("input"));
       sendMessage();
     });
+  });
+
+  // ===== Handle browser back/forward =====
+  window.addEventListener("hashchange", () => {
+    const chatId = getChatIdFromUrl();
+    if (chatId && chatId !== currentChatId) {
+      loadChat(chatId);
+    } else if (!chatId) {
+      currentChatId = null;
+      showEmptyState();
+      renderSidebar();
+    }
   });
 
   function createEmptyState() {
@@ -154,7 +310,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return contentDiv;
   }
 
-  function addMessage(message, sender) {
+  function addMessage(message, sender, persist = true) {
     const contentDiv = createMessageElement(sender);
 
     if (sender === "assistant") {
@@ -162,6 +318,10 @@ document.addEventListener("DOMContentLoaded", () => {
       addCopyButtons(contentDiv);
     } else {
       contentDiv.textContent = message;
+    }
+
+    if (persist) {
+      saveMessage(sender, message);
     }
 
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -239,6 +399,9 @@ document.addEventListener("DOMContentLoaded", () => {
     messageInput.value = "";
     messageInput.style.height = "auto";
 
+    // Create conversation on first message
+    ensureConversation(message);
+
     addMessage(message, "user");
 
     const typingIndicator = addTypingIndicator();
@@ -298,6 +461,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Add copy buttons after streaming is complete
       addCopyButtons(contentDiv);
+
+      // Save the full assistant response
+      saveMessage("assistant", fullResponse);
     } catch (error) {
       if (error.name === "AbortError") {
         typingIndicator.parentElement?.parentElement?.remove();
@@ -315,6 +481,16 @@ document.addEventListener("DOMContentLoaded", () => {
       sendButton.disabled = !messageInput.value.trim();
       abortController = null;
       hideStopButton();
+    }
+  }
+
+  // ===== Initialize on page load =====
+  renderSidebar();
+  const initialChatId = getChatIdFromUrl();
+  if (initialChatId) {
+    const convos = loadConversations();
+    if (convos[initialChatId]) {
+      loadChat(initialChatId);
     }
   }
 });

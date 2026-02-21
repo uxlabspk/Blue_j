@@ -127,22 +127,55 @@ body {
 }
 
 .conversation-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 10px 14px;
   border-radius: 8px;
   font-size: 14px;
   color: var(--text-secondary);
   cursor: pointer;
   transition: background var(--transition);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   margin-bottom: 2px;
+  gap: 6px;
 }
 
 .conversation-item:hover,
 .conversation-item.active {
   background: var(--sidebar-hover);
   color: var(--text-primary);
+}
+
+.conversation-title {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.conversation-delete {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color var(--transition), background var(--transition);
+}
+
+.conversation-item:hover .conversation-delete {
+  display: flex;
+}
+
+.conversation-delete:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
 }
 
 /* ===== Main Content ===== */
@@ -478,6 +511,7 @@ body {
 .copy-btn {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   background: transparent;
   border: none;
