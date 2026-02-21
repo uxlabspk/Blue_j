@@ -287,14 +287,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const avatarDiv = document.createElement("div");
     avatarDiv.classList.add("message-avatar");
-    avatarDiv.textContent = sender === "user" ? "Y" : "AI";
+    avatarDiv.textContent = sender === "user" ? "Y" : "B";
 
     const bodyDiv = document.createElement("div");
     bodyDiv.classList.add("message-body");
 
     const senderDiv = document.createElement("div");
     senderDiv.classList.add("message-sender");
-    senderDiv.textContent = sender === "user" ? "You" : "Ollama";
+    senderDiv.textContent = sender === "user" ? "You" : "Blue J";
 
     const contentDiv = document.createElement("div");
     contentDiv.classList.add("message-content");
@@ -362,21 +362,20 @@ document.addEventListener("DOMContentLoaded", () => {
     // Copy button
     const copyBtn = document.createElement("button");
     copyBtn.className = "message-action-btn";
+    copyBtn.title = "Copy";
     copyBtn.innerHTML = `
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
       </svg>
-      Copy
     `;
     copyBtn.addEventListener("click", () => {
       navigator.clipboard.writeText(message).then(() => {
         const originalHTML = copyBtn.innerHTML;
         copyBtn.innerHTML = `
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="20 6 9 17 4 12"></polyline>
           </svg>
-          Copied!
         `;
         setTimeout(() => {
           copyBtn.innerHTML = originalHTML;
@@ -387,12 +386,12 @@ document.addEventListener("DOMContentLoaded", () => {
     // Regenerate button
     const regenerateBtn = document.createElement("button");
     regenerateBtn.className = "message-action-btn";
+    regenerateBtn.title = "Regenerate"
     regenerateBtn.innerHTML = `
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="23 4 23 10 17 10"></polyline>
         <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
       </svg>
-      Regenerate
     `;
     regenerateBtn.addEventListener("click", () => {
       if (isGenerating) return;
@@ -402,13 +401,13 @@ document.addEventListener("DOMContentLoaded", () => {
     // Speak button
     const speakBtn = document.createElement("button");
     speakBtn.className = "message-action-btn";
+    speakBtn.title = "Speak";
     speakBtn.innerHTML = `
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
         <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
         <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
       </svg>
-      Speak
     `;
     speakBtn.addEventListener("click", () => {
       speakMessage(message, speakBtn);
@@ -468,13 +467,13 @@ document.addEventListener("DOMContentLoaded", () => {
         .querySelectorAll(".message-action-btn.speaking")
         .forEach((btn) => {
           btn.classList.remove("speaking");
+          btn.title = "Speak";
           btn.innerHTML = `
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
             <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
             <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
           </svg>
-          Speak
         `;
         });
       return;
@@ -485,37 +484,37 @@ document.addEventListener("DOMContentLoaded", () => {
     currentSpeech = utterance;
 
     button.classList.add("speaking");
+    button.title = "Stop speaking";
     button.innerHTML = `
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <rect x="6" y="4" width="4" height="16"></rect>
         <rect x="14" y="4" width="4" height="16"></rect>
       </svg>
-      Stop
     `;
 
     utterance.onend = () => {
       currentSpeech = null;
       button.classList.remove("speaking");
+      button.title = "Speak";
       button.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
           <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
           <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
         </svg>
-        Speak
       `;
     };
 
     utterance.onerror = () => {
       currentSpeech = null;
       button.classList.remove("speaking");
+      button.title = "Speak";
       button.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
           <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
           <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
         </svg>
-        Speak
       `;
     };
 

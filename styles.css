@@ -719,43 +719,43 @@ body {
 .message-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 12px;
-  padding-top: 8px;
+  gap: 4px;
+  margin-top: 8px;
+  margin-bottom: 4px;
 }
 
 .message-action-btn {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 12px;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
   background: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-family: inherit;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-muted);
   cursor: pointer;
-  transition: background var(--transition), border-color var(--transition), color var(--transition);
+  transition: background var(--transition), color var(--transition);
 }
 
 .message-action-btn:hover {
   background: var(--bg-secondary);
-  border-color: var(--text-muted);
   color: var(--text-primary);
 }
 
 .message-action-btn svg {
   flex-shrink: 0;
+  width: 16px;
+  height: 16px;
 }
 
 .message-action-btn.speaking {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: white;
+  background: var(--bg-secondary);
+  color: var(--accent);
 }
 
 .message-action-btn.speaking:hover {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
+  background: var(--sidebar-hover);
+  color: var(--accent-hover);
 }
