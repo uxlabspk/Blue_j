@@ -1,0 +1,93 @@
+/* Message styling for dynamically created elements */
+.message {
+  margin-bottom: 24px;
+}
+
+.message-header {
+  font-weight: 600;
+  margin-bottom: 8px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.message.user .message-header {
+  color: #667eea;
+}
+
+.message.assistant .message-header {
+  color: #764ba2;
+}
+
+.message-content {
+  background: white;
+  padding: 16px 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  line-height: 1.6;
+  color: #333;
+}
+
+.message.user .message-content {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  margin-left: 20%;
+}
+
+.message.assistant .message-content {
+  margin-right: 20%;
+}
+
+.message-content pre {
+  background: #1e1e1e;
+  border-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+  margin: 12px 0;
+}
+
+.message-content code {
+  font-family: "Consolas", "Monaco", "Courier New", monospace;
+  font-size: 14px;
+}
+
+.message-content :not(pre) > code {
+  background: #f4f4f4;
+  color: #e83e8c;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.message.user .message-content :not(pre) > code {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.message-content p {
+  margin: 12px 0;
+}
+
+.message-content ul,
+.message-content ol {
+  margin: 12px 0;
+  padding-left: 24px;
+}
+
+.message-content li {
+  margin: 6px 0;
+}
+
+.typing-indicator {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+}
+
+.typing-indicator span {
+  width: 8px;
+  height: 8px;
+  background: #764ba2;
+  border-radius: 50%;
+}

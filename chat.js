@@ -87,7 +87,7 @@ document.addEventListener("DOMContentLoaded", () => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "qwen2.5-coder:7b",
+          model: "qwen3:0.6b", //"qwen2.5-coder:7b",
           prompt: message,
           stream: true, // Enable streaming
         }),
