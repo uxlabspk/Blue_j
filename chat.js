@@ -8,6 +8,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const newChatBtn = document.getElementById("new-chat-btn");
   const sidebarConversations = document.getElementById("sidebar-conversations");
   const suggestionCards = document.querySelectorAll(".suggestion-card");
+  const settingsBtn = document.getElementById("settings-btn");
+  const settingsModal = document.getElementById("settings-modal");
+  const modalClose = document.getElementById("modal-close");
+  const cancelBtn = document.getElementById("cancel-btn");
+  const saveSettingsBtn = document.getElementById("save-settings-btn");
+  const usernameInput = document.getElementById("username-input");
+  const systemPromptInput = document.getElementById("system-prompt-input");
 
   let isGenerating = false;
   let abortController = null;
@@ -15,6 +22,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ===== Conversation Storage =====
   const STORAGE_KEY = "ollama_conversations";
+  const SETTINGS_KEY = "ollama_settings";
+
+  // ===== Settings =====
+  function loadSettings() {
+    try {
+      const settings = JSON.parse(localStorage.getItem(SETTINGS_KEY));
+      return settings || { username: "", systemPrompt: "" };
+    } catch {
+      return { username: "", systemPrompt: "" };
+    }
+  }
+
+  function saveSettings(settings) {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  }
+
+  let userSettings = loadSettings();
 
   function loadConversations() {
     try {
@@ -294,7 +318,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const senderDiv = document.createElement("div");
     senderDiv.classList.add("message-sender");
-    senderDiv.textContent = sender === "user" ? "You" : "Blue J";
+    const displayName =
+      sender === "user" ? userSettings.username || "You" : "Ollama";
+    senderDiv.textContent = displayName;
 
     const contentDiv = document.createElement("div");
     contentDiv.classList.add("message-content");
@@ -386,7 +412,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Regenerate button
     const regenerateBtn = document.createElement("button");
     regenerateBtn.className = "message-action-btn";
-    regenerateBtn.title = "Regenerate"
+    regenerateBtn.title = "Regenerate";
     regenerateBtn.innerHTML = `
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="23 4 23 10 17 10"></polyline>
@@ -564,16 +590,23 @@ document.addEventListener("DOMContentLoaded", () => {
     abortController = new AbortController();
 
     try {
+      const requestBody = {
+        model: "mistral:7b",
+        prompt: message,
+        stream: true,
+      };
+
+      // Add system prompt if configured
+      if (userSettings.systemPrompt) {
+        requestBody.system = userSettings.systemPrompt;
+      }
+
       const response = await fetch("http://127.0.0.1:11434/api/generate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          model: "mistral:7b",
-          prompt: message,
-          stream: true,
-        }),
+        body: JSON.stringify(requestBody),
         signal: abortController.signal,
       });
 
@@ -655,6 +688,35 @@ document.addEventListener("DOMContentLoaded", () => {
 
     await generateResponse(message);
   }
+
+  // ===== Settings Modal =====
+  settingsBtn.addEventListener("click", () => {
+    usernameInput.value = userSettings.username;
+    systemPromptInput.value = userSettings.systemPrompt;
+    settingsModal.classList.add("active");
+  });
+
+  modalClose.addEventListener("click", () => {
+    settingsModal.classList.remove("active");
+  });
+
+  cancelBtn.addEventListener("click", () => {
+    settingsModal.classList.remove("active");
+  });
+
+  saveSettingsBtn.addEventListener("click", () => {
+    userSettings.username = usernameInput.value.trim();
+    userSettings.systemPrompt = systemPromptInput.value.trim();
+    saveSettings(userSettings);
+    settingsModal.classList.remove("active");
+  });
+
+  // Close modal when clicking outside
+  settingsModal.addEventListener("click", (e) => {
+    if (e.target === settingsModal) {
+      settingsModal.classList.remove("active");
+    }
+  });
 
   // ===== Initialize on page load =====
   renderSidebar();
