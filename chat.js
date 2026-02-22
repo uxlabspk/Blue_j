@@ -13,6 +13,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const modalClose = document.getElementById("modal-close");
   const cancelBtn = document.getElementById("cancel-btn");
   const saveSettingsBtn = document.getElementById("save-settings-btn");
+  const backendSelect = document.getElementById("backend-select");
+  const endpointInput = document.getElementById("endpoint-input");
   const modelSelect = document.getElementById("model-select");
   const usernameInput = document.getElementById("username-input");
   const systemPromptInput = document.getElementById("system-prompt-input");
@@ -42,6 +44,25 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ===== Settings =====
+  // Backend configurations
+  const BACKEND_DEFAULTS = {
+    ollama: {
+      endpoint: "http://127.0.0.1:11434",
+      modelsPath: "/api/tags",
+      chatPath: "/api/chat",
+    },
+    llamacpp: {
+      endpoint: "http://127.0.0.1:8080",
+      modelsPath: "/v1/models",
+      chatPath: "/v1/chat/completions",
+    },
+    lmstudio: {
+      endpoint: "http://127.0.0.1:1234",
+      modelsPath: "/v1/models",
+      chatPath: "/v1/chat/completions",
+    },
+  };
+
   function loadSettings() {
     try {
       const settings = JSON.parse(localStorage.getItem(SETTINGS_KEY));
@@ -50,6 +71,8 @@ document.addEventListener("DOMContentLoaded", () => {
           username: "",
           systemPrompt: "",
           model: "NeuralNexusLab/HacKing:latest",
+          backend: "ollama",
+          endpoint: BACKEND_DEFAULTS.ollama.endpoint,
         }
       );
     } catch {
@@ -57,6 +80,8 @@ document.addEventListener("DOMContentLoaded", () => {
         username: "",
         systemPrompt: "",
         model: "NeuralNexusLab/HacKing:latest",
+        backend: "ollama",
+        endpoint: BACKEND_DEFAULTS.ollama.endpoint,
       };
     }
   }
@@ -68,15 +93,38 @@ document.addEventListener("DOMContentLoaded", () => {
   let userSettings = loadSettings();
   let availableModels = [];
 
-  // Fetch available models from Ollama
+  // Get API endpoint for current backend
+  function getApiEndpoint(path) {
+    const backend = userSettings.backend || "ollama";
+    const endpoint =
+      userSettings.endpoint || BACKEND_DEFAULTS[backend].endpoint;
+    return `${endpoint}${path}`;
+  }
+
+  // Fetch available models from backend
   async function fetchAvailableModels() {
     try {
-      const response = await fetch("http://127.0.0.1:11434/api/tags");
+      const backend = userSettings.backend || "ollama";
+      const modelsPath = BACKEND_DEFAULTS[backend].modelsPath;
+      const endpoint = getApiEndpoint(modelsPath);
+
+      const response = await fetch(endpoint);
       if (!response.ok) {
         throw new Error("Failed to fetch models");
       }
       const data = await response.json();
-      availableModels = data.models || [];
+
+      // Parse models based on backend type
+      if (backend === "ollama") {
+        availableModels = data.models || [];
+      } else {
+        // llama.cpp and LM Studio use OpenAI-compatible format
+        availableModels = (data.data || []).map((model) => ({
+          name: model.id,
+          model: model.id,
+        }));
+      }
+
       updateModelSelect();
     } catch (error) {
       console.error("Error fetching models:", error);
@@ -504,7 +552,7 @@ document.addEventListener("DOMContentLoaded", () => {
     actionsDiv.appendChild(copyBtn);
     actionsDiv.appendChild(regenerateBtn);
     actionsDiv.appendChild(speakBtn);
-    contentDiv.appendChild(actionsDiv);
+    return actionsDiv;
   }
 
   function regenerateResponse() {
@@ -645,11 +693,51 @@ document.addEventListener("DOMContentLoaded", () => {
     if (stopBtn) stopBtn.remove();
   }
 
+  // Helper function to estimate token count (roughly 4 chars per token)
+  function estimateTokenCount(text) {
+    // Simple approximation: ~4 characters per token on average
+    return Math.ceil(text.length / 4);
+  }
+
+  function addStatsDisplay(contentDiv, stats, actionsDiv) {
+    const statsDiv = document.createElement("div");
+    statsDiv.className = "message-stats";
+
+    const statsLeft = document.createElement("div");
+    statsLeft.className = "message-stats-left";
+
+    const tokensSpan = document.createElement("span");
+    tokensSpan.className = "stat-item";
+    tokensSpan.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg> ${stats.tokens} tokens`;
+
+    const speedSpan = document.createElement("span");
+    speedSpan.className = "stat-item";
+    speedSpan.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> ${stats.tokensPerSecond} tokens/s`;
+
+    const timeSpan = document.createElement("span");
+    timeSpan.className = "stat-item";
+    timeSpan.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> ${stats.duration}s`;
+
+    statsLeft.appendChild(tokensSpan);
+    statsLeft.appendChild(speedSpan);
+    statsLeft.appendChild(timeSpan);
+
+    statsDiv.appendChild(statsLeft);
+    if (actionsDiv) {
+      actionsDiv.className = "message-stats-actions";
+      statsDiv.appendChild(actionsDiv);
+    }
+
+    contentDiv.appendChild(statsDiv);
+  }
   async function generateResponse(message) {
     const typingIndicator = addTypingIndicator();
     showStopButton();
 
     abortController = new AbortController();
+
+    // Track start time for statistics
+    const startTime = Date.now();
 
     try {
       // Build conversation history
@@ -684,13 +772,17 @@ document.addEventListener("DOMContentLoaded", () => {
         content: message,
       });
 
+      const backend = userSettings.backend || "ollama";
+      const chatPath = BACKEND_DEFAULTS[backend].chatPath;
+      const endpoint = getApiEndpoint(chatPath);
+
       const requestBody = {
         model: userSettings.model || "NeuralNexusLab/HacKing:latest",
         messages: messages,
         stream: true,
       };
 
-      const response = await fetch("http://127.0.0.1:11434/api/chat", {
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -724,9 +816,19 @@ document.addEventListener("DOMContentLoaded", () => {
         for (const line of lines) {
           try {
             const data = JSON.parse(line);
-            // For /api/chat endpoint, response content is in message.content
-            if (data.message && data.message.content) {
-              fullResponse += data.message.content;
+            const backend = userSettings.backend || "ollama";
+
+            let content = "";
+            if (backend === "ollama") {
+              // Ollama format: data.message.content
+              content = data.message?.content || "";
+            } else {
+              // OpenAI format (llama.cpp, LM Studio): data.choices[0].delta.content
+              content = data.choices?.[0]?.delta?.content || "";
+            }
+
+            if (content) {
+              fullResponse += content;
               contentDiv.innerHTML = marked.parse(fullResponse);
               messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }
@@ -736,9 +838,26 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
 
+      // Calculate statistics
+      const endTime = Date.now();
+      const duration = ((endTime - startTime) / 1000).toFixed(2);
+      const tokenCount = estimateTokenCount(fullResponse);
+      const tokensPerSecond = (tokenCount / parseFloat(duration)).toFixed(2);
+
       // Add copy buttons after streaming is complete
       addCopyButtons(contentDiv);
-      addMessageActions(contentDiv, fullResponse);
+      const actionsDiv = addMessageActions(contentDiv, fullResponse);
+
+      // Add statistics display with action buttons
+      addStatsDisplay(
+        contentDiv,
+        {
+          tokens: tokenCount,
+          tokensPerSecond: tokensPerSecond,
+          duration: duration,
+        },
+        actionsDiv,
+      );
 
       // Save the full assistant response
       saveMessage("assistant", fullResponse);
@@ -958,7 +1077,17 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ===== Settings Modal =====
+  // Update endpoint when backend changes
+  backendSelect.addEventListener("change", () => {
+    const backend = backendSelect.value;
+    endpointInput.value = BACKEND_DEFAULTS[backend].endpoint;
+  });
+
   settingsBtn.addEventListener("click", () => {
+    backendSelect.value = userSettings.backend || "ollama";
+    endpointInput.value =
+      userSettings.endpoint ||
+      BACKEND_DEFAULTS[userSettings.backend || "ollama"].endpoint;
     modelSelect.value = userSettings.model;
     usernameInput.value = userSettings.username;
     systemPromptInput.value = userSettings.systemPrompt;
@@ -974,11 +1103,15 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   saveSettingsBtn.addEventListener("click", () => {
+    userSettings.backend = backendSelect.value;
+    userSettings.endpoint = endpointInput.value.trim();
     userSettings.model = modelSelect.value;
     userSettings.username = usernameInput.value.trim();
     userSettings.systemPrompt = systemPromptInput.value.trim();
     saveSettings(userSettings);
     settingsModal.classList.remove("active");
+    // Refresh models after backend change
+    fetchAvailableModels();
   });
 
   // Close modal when clicking outside
