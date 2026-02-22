@@ -84,7 +84,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // Get API endpoint for current backend
   function getApiEndpoint(path) {
     const backend = userSettings.backend || "ollama";
-    const endpoint = userSettings.endpoint || BACKEND_DEFAULTS[backend].endpoint;
+    const endpoint =
+      userSettings.endpoint || BACKEND_DEFAULTS[backend].endpoint;
     return `${endpoint}${path}`;
   }
 
@@ -94,24 +95,24 @@ document.addEventListener("DOMContentLoaded", () => {
       const backend = userSettings.backend || "ollama";
       const modelsPath = BACKEND_DEFAULTS[backend].modelsPath;
       const endpoint = getApiEndpoint(modelsPath);
-      
+
       const response = await fetch(endpoint);
       if (!response.ok) {
         throw new Error("Failed to fetch models");
       }
       const data = await response.json();
-      
+
       // Parse models based on backend type
       if (backend === "ollama") {
         availableModels = data.models || [];
       } else {
         // llama.cpp and LM Studio use OpenAI-compatible format
-        availableModels = (data.data || []).map(model => ({
+        availableModels = (data.data || []).map((model) => ({
           name: model.id,
           model: model.id,
         }));
       }
-      
+
       updateModelSelect();
     } catch (error) {
       console.error("Error fetching models:", error);
@@ -762,7 +763,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const backend = userSettings.backend || "ollama";
       const chatPath = BACKEND_DEFAULTS[backend].chatPath;
       const endpoint = getApiEndpoint(chatPath);
-      
+
       const requestBody = {
         model: userSettings.model || "NeuralNexusLab/HacKing:latest",
         messages: messages,
@@ -804,7 +805,7 @@ document.addEventListener("DOMContentLoaded", () => {
           try {
             const data = JSON.parse(line);
             const backend = userSettings.backend || "ollama";
-            
+
             let content = "";
             if (backend === "ollama") {
               // Ollama format: data.message.content
@@ -813,7 +814,7 @@ document.addEventListener("DOMContentLoaded", () => {
               // OpenAI format (llama.cpp, LM Studio): data.choices[0].delta.content
               content = data.choices?.[0]?.delta?.content || "";
             }
-            
+
             if (content) {
               fullResponse += content;
               contentDiv.innerHTML = marked.parse(fullResponse);
@@ -1072,7 +1073,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   settingsBtn.addEventListener("click", () => {
     backendSelect.value = userSettings.backend || "ollama";
-    endpointInput.value = userSettings.endpoint || BACKEND_DEFAULTS[userSettings.backend || "ollama"].endpoint;
+    endpointInput.value =
+      userSettings.endpoint ||
+      BACKEND_DEFAULTS[userSettings.backend || "ollama"].endpoint;
     modelSelect.value = userSettings.model;
     usernameInput.value = userSettings.username;
     systemPromptInput.value = userSettings.systemPrompt;
