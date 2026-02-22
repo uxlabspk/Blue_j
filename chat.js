@@ -635,18 +635,45 @@ document.addEventListener("DOMContentLoaded", () => {
     abortController = new AbortController();
 
     try {
-      const requestBody = {
-        model: userSettings.model || "NeuralNexusLab/HacKing:latest",
-        prompt: message,
-        stream: true,
-      };
+      // Build conversation history
+      const messages = [];
 
       // Add system prompt if configured
       if (userSettings.systemPrompt) {
-        requestBody.system = userSettings.systemPrompt;
+        messages.push({
+          role: "system",
+          content: userSettings.systemPrompt,
+        });
       }
 
-      const response = await fetch("http://127.0.0.1:11434/api/generate", {
+      // Get conversation history
+      if (currentChatId) {
+        const convos = loadConversations();
+        const convo = convos[currentChatId];
+        if (convo && convo.messages) {
+          // Add all previous messages
+          convo.messages.forEach((msg) => {
+            messages.push({
+              role: msg.sender === "user" ? "user" : "assistant",
+              content: msg.content,
+            });
+          });
+        }
+      }
+
+      // Add the current user message
+      messages.push({
+        role: "user",
+        content: message,
+      });
+
+      const requestBody = {
+        model: userSettings.model || "NeuralNexusLab/HacKing:latest",
+        messages: messages,
+        stream: true,
+      };
+
+      const response = await fetch("http://127.0.0.1:11434/api/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -680,8 +707,9 @@ document.addEventListener("DOMContentLoaded", () => {
         for (const line of lines) {
           try {
             const data = JSON.parse(line);
-            if (data.response) {
-              fullResponse += data.response;
+            // For /api/chat endpoint, response content is in message.content
+            if (data.message && data.message.content) {
+              fullResponse += data.message.content;
               contentDiv.innerHTML = marked.parse(fullResponse);
               messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }
