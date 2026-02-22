@@ -13,6 +13,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const modalClose = document.getElementById("modal-close");
   const cancelBtn = document.getElementById("cancel-btn");
   const saveSettingsBtn = document.getElementById("save-settings-btn");
+  const backendSelect = document.getElementById("backend-select");
+  const endpointInput = document.getElementById("endpoint-input");
   const modelSelect = document.getElementById("model-select");
   const usernameInput = document.getElementById("username-input");
   const systemPromptInput = document.getElementById("system-prompt-input");
@@ -30,6 +32,25 @@ document.addEventListener("DOMContentLoaded", () => {
   const SETTINGS_KEY = "ollama_settings";
 
   // ===== Settings =====
+  // Backend configurations
+  const BACKEND_DEFAULTS = {
+    ollama: {
+      endpoint: "http://127.0.0.1:11434",
+      modelsPath: "/api/tags",
+      chatPath: "/api/chat",
+    },
+    llamacpp: {
+      endpoint: "http://127.0.0.1:8080",
+      modelsPath: "/v1/models",
+      chatPath: "/v1/chat/completions",
+    },
+    lmstudio: {
+      endpoint: "http://127.0.0.1:1234",
+      modelsPath: "/v1/models",
+      chatPath: "/v1/chat/completions",
+    },
+  };
+
   function loadSettings() {
     try {
       const settings = JSON.parse(localStorage.getItem(SETTINGS_KEY));
@@ -38,6 +59,8 @@ document.addEventListener("DOMContentLoaded", () => {
           username: "",
           systemPrompt: "",
           model: "NeuralNexusLab/HacKing:latest",
+          backend: "ollama",
+          endpoint: BACKEND_DEFAULTS.ollama.endpoint,
         }
       );
     } catch {
@@ -45,6 +68,8 @@ document.addEventListener("DOMContentLoaded", () => {
         username: "",
         systemPrompt: "",
         model: "NeuralNexusLab/HacKing:latest",
+        backend: "ollama",
+        endpoint: BACKEND_DEFAULTS.ollama.endpoint,
       };
     }
   }
@@ -56,15 +81,37 @@ document.addEventListener("DOMContentLoaded", () => {
   let userSettings = loadSettings();
   let availableModels = [];
 
-  // Fetch available models from Ollama
+  // Get API endpoint for current backend
+  function getApiEndpoint(path) {
+    const backend = userSettings.backend || "ollama";
+    const endpoint = userSettings.endpoint || BACKEND_DEFAULTS[backend].endpoint;
+    return `${endpoint}${path}`;
+  }
+
+  // Fetch available models from backend
   async function fetchAvailableModels() {
     try {
-      const response = await fetch("http://127.0.0.1:11434/api/tags");
+      const backend = userSettings.backend || "ollama";
+      const modelsPath = BACKEND_DEFAULTS[backend].modelsPath;
+      const endpoint = getApiEndpoint(modelsPath);
+      
+      const response = await fetch(endpoint);
       if (!response.ok) {
         throw new Error("Failed to fetch models");
       }
       const data = await response.json();
-      availableModels = data.models || [];
+      
+      // Parse models based on backend type
+      if (backend === "ollama") {
+        availableModels = data.models || [];
+      } else {
+        // llama.cpp and LM Studio use OpenAI-compatible format
+        availableModels = (data.data || []).map(model => ({
+          name: model.id,
+          model: model.id,
+        }));
+      }
+      
       updateModelSelect();
     } catch (error) {
       console.error("Error fetching models:", error);
@@ -712,13 +759,17 @@ document.addEventListener("DOMContentLoaded", () => {
         content: message,
       });
 
+      const backend = userSettings.backend || "ollama";
+      const chatPath = BACKEND_DEFAULTS[backend].chatPath;
+      const endpoint = getApiEndpoint(chatPath);
+      
       const requestBody = {
         model: userSettings.model || "NeuralNexusLab/HacKing:latest",
         messages: messages,
         stream: true,
       };
 
-      const response = await fetch("http://127.0.0.1:11434/api/chat", {
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -752,9 +803,19 @@ document.addEventListener("DOMContentLoaded", () => {
         for (const line of lines) {
           try {
             const data = JSON.parse(line);
-            // For /api/chat endpoint, response content is in message.content
-            if (data.message && data.message.content) {
-              fullResponse += data.message.content;
+            const backend = userSettings.backend || "ollama";
+            
+            let content = "";
+            if (backend === "ollama") {
+              // Ollama format: data.message.content
+              content = data.message?.content || "";
+            } else {
+              // OpenAI format (llama.cpp, LM Studio): data.choices[0].delta.content
+              content = data.choices?.[0]?.delta?.content || "";
+            }
+            
+            if (content) {
+              fullResponse += content;
               contentDiv.innerHTML = marked.parse(fullResponse);
               messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }
@@ -1003,7 +1064,15 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ===== Settings Modal =====
+  // Update endpoint when backend changes
+  backendSelect.addEventListener("change", () => {
+    const backend = backendSelect.value;
+    endpointInput.value = BACKEND_DEFAULTS[backend].endpoint;
+  });
+
   settingsBtn.addEventListener("click", () => {
+    backendSelect.value = userSettings.backend || "ollama";
+    endpointInput.value = userSettings.endpoint || BACKEND_DEFAULTS[userSettings.backend || "ollama"].endpoint;
     modelSelect.value = userSettings.model;
     usernameInput.value = userSettings.username;
     systemPromptInput.value = userSettings.systemPrompt;
@@ -1019,11 +1088,15 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   saveSettingsBtn.addEventListener("click", () => {
+    userSettings.backend = backendSelect.value;
+    userSettings.endpoint = endpointInput.value.trim();
     userSettings.model = modelSelect.value;
     userSettings.username = usernameInput.value.trim();
     userSettings.systemPrompt = systemPromptInput.value.trim();
     saveSettings(userSettings);
     settingsModal.classList.remove("active");
+    // Refresh models after backend change
+    fetchAvailableModels();
   });
 
   // Close modal when clicking outside
