@@ -13,6 +13,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const modalClose = document.getElementById("modal-close");
   const cancelBtn = document.getElementById("cancel-btn");
   const saveSettingsBtn = document.getElementById("save-settings-btn");
+  const modelSelect = document.getElementById("model-select");
   const usernameInput = document.getElementById("username-input");
   const systemPromptInput = document.getElementById("system-prompt-input");
 
@@ -28,9 +29,19 @@ document.addEventListener("DOMContentLoaded", () => {
   function loadSettings() {
     try {
       const settings = JSON.parse(localStorage.getItem(SETTINGS_KEY));
-      return settings || { username: "", systemPrompt: "" };
+      return (
+        settings || {
+          username: "",
+          systemPrompt: "",
+          model: "NeuralNexusLab/HacKing:latest",
+        }
+      );
     } catch {
-      return { username: "", systemPrompt: "" };
+      return {
+        username: "",
+        systemPrompt: "",
+        model: "NeuralNexusLab/HacKing:latest",
+      };
     }
   }
 
@@ -39,6 +50,40 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   let userSettings = loadSettings();
+  let availableModels = [];
+
+  // Fetch available models from Ollama
+  async function fetchAvailableModels() {
+    try {
+      const response = await fetch("http://127.0.0.1:11434/api/tags");
+      if (!response.ok) {
+        throw new Error("Failed to fetch models");
+      }
+      const data = await response.json();
+      availableModels = data.models || [];
+      updateModelSelect();
+    } catch (error) {
+      console.error("Error fetching models:", error);
+      modelSelect.innerHTML = '<option value="">Failed to load models</option>';
+    }
+  }
+
+  function updateModelSelect() {
+    modelSelect.innerHTML = "";
+    if (availableModels.length === 0) {
+      modelSelect.innerHTML = '<option value="">No models available</option>';
+      return;
+    }
+    availableModels.forEach((model) => {
+      const option = document.createElement("option");
+      option.value = model.name;
+      option.textContent = model.name;
+      if (model.name === userSettings.model) {
+        option.selected = true;
+      }
+      modelSelect.appendChild(option);
+    });
+  }
 
   function loadConversations() {
     try {
@@ -591,7 +636,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     try {
       const requestBody = {
-        model: "mistral:7b",
+        model: userSettings.model || "NeuralNexusLab/HacKing:latest",
         prompt: message,
         stream: true,
       };
@@ -691,6 +736,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ===== Settings Modal =====
   settingsBtn.addEventListener("click", () => {
+    modelSelect.value = userSettings.model;
     usernameInput.value = userSettings.username;
     systemPromptInput.value = userSettings.systemPrompt;
     settingsModal.classList.add("active");
@@ -705,6 +751,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   saveSettingsBtn.addEventListener("click", () => {
+    userSettings.model = modelSelect.value;
     userSettings.username = usernameInput.value.trim();
     userSettings.systemPrompt = systemPromptInput.value.trim();
     saveSettings(userSettings);
@@ -720,6 +767,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ===== Initialize on page load =====
   renderSidebar();
+  fetchAvailableModels();
   const initialChatId = getChatIdFromUrl();
   if (initialChatId) {
     const convos = loadConversations();
