@@ -16,10 +16,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const modelSelect = document.getElementById("model-select");
   const usernameInput = document.getElementById("username-input");
   const systemPromptInput = document.getElementById("system-prompt-input");
+  const fileInput = document.getElementById("file-input");
+  const attachFileBtn = document.getElementById("attach-file-btn");
+  const fileAttachmentsContainer = document.getElementById("file-attachments");
 
   let isGenerating = false;
   let abortController = null;
   let currentChatId = null;
+  let attachedFiles = [];
 
   // ===== Conversation Storage =====
   const STORAGE_KEY = "ollama_conversations";
@@ -274,6 +278,7 @@ document.addEventListener("DOMContentLoaded", () => {
     messageInput.value = "";
     messageInput.style.height = "auto";
     sendButton.disabled = true;
+    clearAttachedFiles();
   });
 
   // ===== Suggestion Cards =====
@@ -745,6 +750,168 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // ===== File Upload & Processing =====
+  // Configure PDF.js worker
+  if (typeof pdfjsLib !== "undefined") {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  }
+
+  async function extractTextFromPDF(file) {
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let fullText = "";
+
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map((item) => item.str).join(" ");
+        fullText += pageText + "\\n";
+      }
+
+      return fullText;
+    } catch (error) {
+      console.error("Error extracting PDF text:", error);
+      throw new Error("Failed to extract text from PDF");
+    }
+  }
+
+  async function readTextFile(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.onerror = (e) => reject(new Error("Failed to read text file"));
+      reader.readAsText(file);
+    });
+  }
+
+  async function processFile(file) {
+    const fileData = {
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      content: "",
+    };
+
+    if (
+      file.type === "application/pdf" ||
+      file.name.toLowerCase().endsWith(".pdf")
+    ) {
+      fileData.content = await extractTextFromPDF(file);
+      fileData.displayType = "PDF";
+    } else if (
+      file.type === "text/plain" ||
+      file.name.toLowerCase().match(/\\.(txt|text)$/)
+    ) {
+      fileData.content = await readTextFile(file);
+      fileData.displayType = "Text";
+    } else {
+      throw new Error(
+        "Unsupported file type. Only PDF and text files are allowed.",
+      );
+    }
+
+    return fileData;
+  }
+
+  function renderFileAttachments() {
+    fileAttachmentsContainer.innerHTML = "";
+
+    if (attachedFiles.length === 0) {
+      fileAttachmentsContainer.style.display = "none";
+      return;
+    }
+
+    fileAttachmentsContainer.style.display = "flex";
+
+    attachedFiles.forEach((file, index) => {
+      const fileChip = document.createElement("div");
+      fileChip.className = "file-chip";
+
+      const fileIcon = document.createElement("span");
+      fileIcon.className = "file-icon";
+      fileIcon.innerHTML = file.displayType === "PDF" ? "📄" : "📝";
+
+      const fileName = document.createElement("span");
+      fileName.className = "file-name";
+      fileName.textContent = file.name;
+      fileName.title = file.name;
+
+      const fileSize = document.createElement("span");
+      fileSize.className = "file-size";
+      fileSize.textContent = formatFileSize(file.size);
+
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "file-remove";
+      removeBtn.innerHTML = `
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      `;
+      removeBtn.addEventListener("click", () => removeFile(index));
+
+      fileChip.appendChild(fileIcon);
+      fileChip.appendChild(fileName);
+      fileChip.appendChild(fileSize);
+      fileChip.appendChild(removeBtn);
+
+      fileAttachmentsContainer.appendChild(fileChip);
+    });
+  }
+
+  function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  }
+
+  function removeFile(index) {
+    attachedFiles.splice(index, 1);
+    renderFileAttachments();
+  }
+
+  function clearAttachedFiles() {
+    attachedFiles = [];
+    renderFileAttachments();
+  }
+
+  function buildContextFromFiles() {
+    if (attachedFiles.length === 0) return "";
+
+    let context = "\\n\\n--- Attached Files Context ---\\n";
+    attachedFiles.forEach((file) => {
+      context += `\\n[File: ${file.name} (${file.displayType})]\\n`;
+      context += `${file.content}\\n`;
+      context += `[End of ${file.name}]\\n`;
+    });
+    context += "--- End of Attached Files ---\\n\\n";
+
+    return context;
+  }
+
+  // Event listeners for file upload
+  attachFileBtn.addEventListener("click", () => {
+    fileInput.click();
+  });
+
+  fileInput.addEventListener("change", async (e) => {
+    const files = Array.from(e.target.files);
+
+    for (const file of files) {
+      try {
+        const fileData = await processFile(file);
+        attachedFiles.push(fileData);
+      } catch (error) {
+        alert(`Error processing ${file.name}: ${error.message}`);
+      }
+    }
+
+    renderFileAttachments();
+    fileInput.value = ""; // Reset input
+  });
+
   async function sendMessage() {
     const message = messageInput.value.trim();
     if (!message || isGenerating) return;
@@ -757,9 +924,25 @@ document.addEventListener("DOMContentLoaded", () => {
     // Create conversation on first message
     ensureConversation(message);
 
-    addMessage(message, "user");
+    // Build message with file context if files are attached
+    let messageWithContext = message;
+    if (attachedFiles.length > 0) {
+      messageWithContext = buildContextFromFiles() + message;
 
-    await generateResponse(message);
+      // Show files in user message
+      const userMessageContent =
+        message +
+        "\\n\\n" +
+        attachedFiles.map((f) => `📎 ${f.name}`).join("\\n");
+      addMessage(userMessageContent, "user");
+
+      // Clear files after sending
+      clearAttachedFiles();
+    } else {
+      addMessage(message, "user");
+    }
+
+    await generateResponse(messageWithContext);
   }
 
   // ===== Settings Modal =====

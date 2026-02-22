@@ -595,6 +595,69 @@ body {
   flex-shrink: 0;
 }
 
+/* ===== File Attachments ===== */
+.file-attachments {
+  max-width: 768px;
+  width: 100%;
+  display: none;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.file-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--text-primary);
+  transition: background var(--transition);
+}
+
+.file-chip:hover {
+  background: var(--sidebar-hover);
+}
+
+.file-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.file-name {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-size {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.file-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background var(--transition), color var(--transition);
+}
+
+.file-remove:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
 .input-container {
   max-width: 768px;
   width: 100%;
@@ -604,7 +667,7 @@ body {
   background: var(--input-bg);
   border: 1px solid var(--input-border);
   border-radius: 16px;
-  padding: 10px 52px 10px 18px;
+  padding: 10px 52px 10px 52px;
   transition: border-color var(--transition), box-shadow var(--transition);
 }
 
@@ -638,6 +701,29 @@ body {
 #message-input::-webkit-scrollbar-thumb {
   background: var(--border-color);
   border-radius: 2px;
+}
+
+.attach-btn {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition), color var(--transition);
+}
+
+.attach-btn:hover {
+  background: var(--border-color);
+  color: var(--text-primary);
 }
 
 .send-btn {
