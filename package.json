@@ -18,7 +18,10 @@
     "chat",
     "electron"
   ],
-  "author": "Muhammad",
+  "author": {
+    "name": "Muhammad Naveed",
+    "email": "naveed@codehuntspk.com"
+  },
   "license": "MIT",
   "devDependencies": {
     "electron": "^28.1.0",
@@ -29,7 +32,7 @@
   },
   "build": {
     "appId": "com.bluej.app",
-    "productName": "Blue J",
+    "productName": "Blue_J",
     "directories": {
       "output": "dist"
     },
@@ -59,7 +62,7 @@
       "target": [
         "AppImage",
         "deb",
-        "rpm"
+        { "target": "rpm", "arch": ["x64"] }
       ],
       "icon": "images/icon.png",
       "category": "Utility"
