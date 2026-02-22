@@ -39,9 +39,7 @@
     "files": [
       "**/*",
       "!**/*.md",
-      "!dist",
-      "!node_modules",
-      "node_modules/electron-store/**/*"
+      "!dist"
     ],
     "win": {
       "target": [
