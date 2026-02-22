@@ -31,6 +31,18 @@ document.addEventListener("DOMContentLoaded", () => {
   const STORAGE_KEY = "ollama_conversations";
   const SETTINGS_KEY = "ollama_settings";
 
+  // ===== Electron Integration =====
+  // Listen for menu shortcuts from Electron
+  if (window.electronAPI) {
+    window.electronAPI.onNewChat(() => {
+      createNewChat();
+    });
+
+    window.electronAPI.onOpenSettings(() => {
+      openSettingsModal();
+    });
+  }
+
   // ===== Settings =====
   // Backend configurations
   const BACKEND_DEFAULTS = {

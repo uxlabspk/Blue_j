@@ -1,0 +1,7 @@
+<!-- This is a placeholder. You should add proper icon files -->
+<!-- For now, the app will use default Electron icon -->
+<!-- To add custom icons, create:
+  - icon.png (512x512 for Linux)
+  - icon.ico (for Windows)
+  - icon.icns (for macOS)
+-->
