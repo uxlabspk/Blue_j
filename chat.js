@@ -492,7 +492,7 @@ document.addEventListener("DOMContentLoaded", () => {
     actionsDiv.appendChild(copyBtn);
     actionsDiv.appendChild(regenerateBtn);
     actionsDiv.appendChild(speakBtn);
-    contentDiv.appendChild(actionsDiv);
+    return actionsDiv;
   }
 
   function regenerateResponse() {
@@ -633,11 +633,51 @@ document.addEventListener("DOMContentLoaded", () => {
     if (stopBtn) stopBtn.remove();
   }
 
+  // Helper function to estimate token count (roughly 4 chars per token)
+  function estimateTokenCount(text) {
+    // Simple approximation: ~4 characters per token on average
+    return Math.ceil(text.length / 4);
+  }
+
+  function addStatsDisplay(contentDiv, stats, actionsDiv) {
+    const statsDiv = document.createElement("div");
+    statsDiv.className = "message-stats";
+
+    const statsLeft = document.createElement("div");
+    statsLeft.className = "message-stats-left";
+
+    const tokensSpan = document.createElement("span");
+    tokensSpan.className = "stat-item";
+    tokensSpan.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg> ${stats.tokens} tokens`;
+
+    const speedSpan = document.createElement("span");
+    speedSpan.className = "stat-item";
+    speedSpan.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> ${stats.tokensPerSecond} tokens/s`;
+
+    const timeSpan = document.createElement("span");
+    timeSpan.className = "stat-item";
+    timeSpan.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> ${stats.duration}s`;
+
+    statsLeft.appendChild(tokensSpan);
+    statsLeft.appendChild(speedSpan);
+    statsLeft.appendChild(timeSpan);
+
+    statsDiv.appendChild(statsLeft);
+    if (actionsDiv) {
+      actionsDiv.className = "message-stats-actions";
+      statsDiv.appendChild(actionsDiv);
+    }
+
+    contentDiv.appendChild(statsDiv);
+  }
   async function generateResponse(message) {
     const typingIndicator = addTypingIndicator();
     showStopButton();
 
     abortController = new AbortController();
+
+    // Track start time for statistics
+    const startTime = Date.now();
 
     try {
       // Build conversation history
@@ -724,9 +764,26 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
 
+      // Calculate statistics
+      const endTime = Date.now();
+      const duration = ((endTime - startTime) / 1000).toFixed(2);
+      const tokenCount = estimateTokenCount(fullResponse);
+      const tokensPerSecond = (tokenCount / parseFloat(duration)).toFixed(2);
+
       // Add copy buttons after streaming is complete
       addCopyButtons(contentDiv);
-      addMessageActions(contentDiv, fullResponse);
+      const actionsDiv = addMessageActions(contentDiv, fullResponse);
+
+      // Add statistics display with action buttons
+      addStatsDisplay(
+        contentDiv,
+        {
+          tokens: tokenCount,
+          tokensPerSecond: tokensPerSecond,
+          duration: duration,
+        },
+        actionsDiv,
+      );
 
       // Save the full assistant response
       saveMessage("assistant", fullResponse);

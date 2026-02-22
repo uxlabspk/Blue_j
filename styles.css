@@ -871,6 +871,49 @@ body {
   color: var(--accent-hover);
 }
 
+/* ===== Message Stats ===== */
+.message-stats {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+}
+
+.message-stats-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.stat-item svg {
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.message-stats-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+}
+
+.message-stats-actions .message-action-btn {
+  width: 28px;
+  height: 28px;
+}
+
 /* ===== Modal ===== */
 .modal {
   display: none;
