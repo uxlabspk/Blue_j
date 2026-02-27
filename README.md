@@ -15,6 +15,8 @@ A modern, feature-rich chat interface for Ollama AI models with a sleek dark the
 - **Syntax highlighting** - Beautiful code highlighting with support for multiple languages
 - **Copy functionality** - Easy one-click copying of code blocks and entire messages
 - **Message actions** - Copy, regenerate, and text-to-speech for each response
+- **File attachments** - Upload and process PDF, TXT, MD, JSON, CSV files for context
+- **Canvas mode** - Generate AI-powered presentations with one click
 
 ### User Experience
 
@@ -24,6 +26,14 @@ A modern, feature-rich chat interface for Ollama AI models with a sleek dark the
 - **Quick suggestions** - Get started with pre-made prompts
 - **Empty state** - Clean welcome screen with helpful suggestions
 - **Responsive design** - Works seamlessly on desktop and mobile devices
+
+### Presentation Generation
+
+- **AI-powered slides** - Generate professional presentations from a simple prompt
+- **Multiple slide types** - Title slides, content slides, big ideas, and section headers
+- **Download as PowerPoint** - Save presentations in PPTX format
+- **Custom styling** - Professional color schemes and layouts
+- **Powered by Ollama** - Uses your local LLM for content generation
 
 ### Customization
 
@@ -52,7 +62,8 @@ A modern, feature-rich chat interface for Ollama AI models with a sleek dark the
 ### Prerequisites
 
 - [Ollama](https://ollama.ai/) installed and running on your system
-- A web browser (Chrome, Firefox, Safari, or Edge)
+- Node.js (v16 or higher) for running the Electron app
+- Python 3.7+ (for presentation generation feature)
 - An Ollama model downloaded (default: `mistral:7b`)
 
 ### Installation
@@ -64,46 +75,86 @@ A modern, feature-rich chat interface for Ollama AI models with a sleek dark the
    cd Blue_j
    ```
 
-2. **Start Ollama**
+2. **Install Node dependencies**
+
+   ```bash
+   npm install
+   ```
+
+3. **Install Python dependencies** (for presentation feature)
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Start Ollama**
 
    ```bash
    ollama serve
    ```
 
-3. **Pull a model** (if not already downloaded)
+5. **Pull a model** (if not already downloaded)
 
    ```bash
    ollama pull mistral:7b
    ```
 
-4. **Open the application**
-   - Simply open `index.html` in your web browser
-   - Or serve it with a local server:
+6. **Run the application**
 
-     ```bash
-     # Using Python
-     python -m http.server 8000
+   ```bash
+   npm start
+   ```
 
-     # Using PHP
-     php -S localhost:8000
+## Usage
 
-     # Using Node.js (with http-server)
-     npx http-server
-     ```
+### Chat Mode
 
-5. **Start chatting!**
-   - Navigate to `http://localhost:8000` (if using a server)
-   - Or open `index.html` directly in your browser
+1. Type your message in the input box at the bottom
+2. Press Enter or click the send button
+3. View the AI's streaming response in real-time
+4. Use the action buttons to copy, regenerate, or listen to responses
+
+### Canvas Mode (Presentation Generation)
+
+1. Click the **Canvas** button (presentation icon) in the top-right corner
+2. The button will turn green, indicating canvas mode is active
+3. Type a presentation topic (e.g., "Introduction to Machine Learning")
+4. Press Enter or click send
+5. Wait for the AI to generate your presentation
+6. Preview the presentation details in the chat
+7. Click **Download Presentation** to save it as a PowerPoint file
+8. Click the Canvas button again to return to normal chat mode
+
+### File Attachments
+
+1. Click the attachment button (paperclip icon)
+2. Select one or more files (PDF, TXT, MD, JSON, CSV)
+3. The files will be shown below the input box
+4. Type your question about the files
+5. The AI will use the file contents as context for its response
 
 ## Project Structure
 
 ```
 Blue_j/
-├── index.html          # Main HTML structure
-├── styles.css          # All styling and themes
-├── chat.js             # Core functionality and logic
-├── README.md           # This file
-└── screenshot.png      # Application preview (add your own)
+├── public/
+│   └── index.html              # Main HTML template
+├── src/
+│   ├── main/
+│   │   └── index.js            # Electron main process
+│   ├── preload/
+│   │   └── index.js            # Security bridge
+│   ├── renderer/
+│   │   ├── js/
+│   │   │   └── chat.js         # Frontend logic
+│   │   └── styles/
+│   │       └── main.css        # Application styling
+│   └── scripts/
+│       └── presentation_generator.py  # PPTX generation script
+├── images/                     # Application icons
+├── package.json                # Node dependencies
+├── requirements.txt            # Python dependencies
+└── README.md                   # This file
 ```
 
 ## Customization

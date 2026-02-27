@@ -210,6 +210,7 @@ body {
   gap: 8px;
 }
 
+.canvas-btn,
 .settings-btn {
   display: flex;
   align-items: center;
@@ -224,9 +225,19 @@ body {
   transition: background var(--transition), color var(--transition);
 }
 
+.canvas-btn:hover,
 .settings-btn:hover {
   background: var(--sidebar-hover);
   color: var(--text-primary);
+}
+
+.canvas-btn.active {
+  background: var(--accent);
+  color: white;
+}
+
+.canvas-btn.active:hover {
+  background: var(--accent-hover);
 }
 
 .sidebar-open-btn {
@@ -1072,6 +1083,165 @@ body {
 .btn-primary:hover {
   background: var(--accent-hover);
   transform: scale(1.02);
+}
+
+/* ===== Canvas Progress Steps ===== */
+.canvas-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.canvas-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  opacity: 0.5;
+  transition: all 0.3s ease;
+}
+
+.canvas-step.active {
+  opacity: 1;
+  border-color: var(--accent);
+  background: rgba(16, 163, 127, 0.08);
+}
+
+.canvas-step.completed {
+  opacity: 1;
+  border-color: var(--border-color);
+  background: var(--bg-primary);
+}
+
+.canvas-step-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.step-number {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.step-check {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.step-spinner {
+  width: 22px;
+  height: 22px;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: step-spin 0.8s linear infinite;
+}
+
+@keyframes step-spin {
+  to { transform: rotate(360deg); }
+}
+
+.canvas-step-text {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.canvas-step.active .canvas-step-text {
+  color: var(--text-primary);
+}
+
+.canvas-step.completed .canvas-step-text {
+  color: var(--text-secondary);
+}
+
+/* ===== Presentation Preview ===== */
+.presentation-preview {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 8px;
+}
+
+.presentation-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.presentation-header svg {
+  flex-shrink: 0;
+}
+
+.presentation-info h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.presentation-info p {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.presentation-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+.download-presentation-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition), transform var(--transition);
+  font-family: inherit;
+}
+
+.download-presentation-btn:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.download-presentation-btn svg {
+  flex-shrink: 0;
 }
 
 .btn-secondary {

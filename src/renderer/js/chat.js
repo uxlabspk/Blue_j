@@ -26,6 +26,8 @@ document.addEventListener("DOMContentLoaded", () => {
   let abortController = null;
   let currentChatId = null;
   let attachedFiles = [];
+  let canvasMode = false;
+  let currentPresentationPath = null;
 
   // ===== Conversation Storage =====
   const STORAGE_KEY = "ollama_conversations";
@@ -329,6 +331,28 @@ document.addEventListener("DOMContentLoaded", () => {
 
   sendButton.addEventListener("click", sendMessage);
 
+  // ===== Canvas Mode Toggle =====
+  const canvasBtn = document.getElementById("canvas-btn");
+  if (canvasBtn) {
+    canvasBtn.addEventListener("click", () => {
+      canvasMode = !canvasMode;
+      canvasBtn.classList.toggle("active", canvasMode);
+
+      // Update placeholder text
+      if (canvasMode) {
+        messageInput.placeholder =
+          "Enter presentation topic (e.g., 'Introduction to AI')";
+        // Clear any attached files when entering canvas mode
+        clearAttachedFiles();
+      } else {
+        messageInput.placeholder = "Message Blue j";
+        currentPresentationPath = null;
+      }
+
+      messageInput.focus();
+    });
+  }
+
   // ===== New Chat =====
   newChatBtn.addEventListener("click", () => {
     currentChatId = null;
@@ -339,6 +363,9 @@ document.addEventListener("DOMContentLoaded", () => {
     messageInput.style.height = "auto";
     sendButton.disabled = true;
     clearAttachedFiles();
+    canvasMode = false;
+    if (canvasBtn) canvasBtn.classList.remove("active");
+    currentPresentationPath = null;
   });
 
   // ===== Suggestion Cards =====
@@ -1055,6 +1082,12 @@ document.addEventListener("DOMContentLoaded", () => {
     // Create conversation on first message
     ensureConversation(message);
 
+    // Check if canvas mode is active
+    if (canvasMode && window.electronAPI && window.electronAPI.canvas) {
+      await handleCanvasMode(message);
+      return;
+    }
+
     // Build message with file context if files are attached
     let messageWithContext = message;
     if (attachedFiles.length > 0) {
@@ -1075,6 +1108,170 @@ document.addEventListener("DOMContentLoaded", () => {
 
     await generateResponse(messageWithContext);
   }
+
+  // ===== Canvas Mode Handler (3-step progress) =====
+  async function handleCanvasMode(userPrompt) {
+    addMessage(`🎨 Create presentation: "${userPrompt}"`, "user");
+
+    // Build the progress tracker UI
+    const contentDiv = createMessageElement("assistant");
+    contentDiv.innerHTML = `
+      <div class="canvas-progress">
+        <div class="canvas-step active" id="canvas-step-1">
+          <div class="canvas-step-icon">
+            <div class="step-spinner"></div>
+          </div>
+          <div class="canvas-step-text">
+            <strong>Step 1:</strong> Understanding your prompt...
+          </div>
+        </div>
+        <div class="canvas-step" id="canvas-step-2">
+          <div class="canvas-step-icon">
+            <div class="step-number">2</div>
+          </div>
+          <div class="canvas-step-text">
+            <strong>Step 2:</strong> Generating slide content
+          </div>
+        </div>
+        <div class="canvas-step" id="canvas-step-3">
+          <div class="canvas-step-icon">
+            <div class="step-number">3</div>
+          </div>
+          <div class="canvas-step-text">
+            <strong>Step 3:</strong> Building presentation file
+          </div>
+        </div>
+      </div>
+    `;
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+    // Listen for progress updates from the Python script
+    let cleanupProgress = null;
+    if (window.electronAPI.canvas.onProgress) {
+      cleanupProgress = window.electronAPI.canvas.onProgress((progress) => {
+        updateCanvasStep(contentDiv, progress);
+      });
+    }
+
+    try {
+      const result =
+        await window.electronAPI.canvas.generatePresentation(userPrompt);
+
+      // Clean up progress listener
+      if (cleanupProgress) cleanupProgress();
+
+      if (result.success) {
+        currentPresentationPath = result.filePath;
+
+        // Replace progress UI with final result
+        contentDiv.innerHTML = `
+          <div class="canvas-progress">
+            <div class="canvas-step completed" id="canvas-step-1">
+              <div class="canvas-step-icon"><div class="step-check">✓</div></div>
+              <div class="canvas-step-text"><strong>Step 1:</strong> Topic identified</div>
+            </div>
+            <div class="canvas-step completed" id="canvas-step-2">
+              <div class="canvas-step-icon"><div class="step-check">✓</div></div>
+              <div class="canvas-step-text"><strong>Step 2:</strong> Content generated</div>
+            </div>
+            <div class="canvas-step completed" id="canvas-step-3">
+              <div class="canvas-step-icon"><div class="step-check">✓</div></div>
+              <div class="canvas-step-text"><strong>Step 3:</strong> File created</div>
+            </div>
+          </div>
+          <div class="presentation-preview">
+            <div class="presentation-header">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#10a37f" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="3" y1="9" x2="21" y2="9"></line>
+                <line x1="9" y1="21" x2="9" y2="9"></line>
+              </svg>
+              <div class="presentation-info">
+                <h3>${result.title}</h3>
+                <p>${result.slides} slides · Ready to download</p>
+              </div>
+            </div>
+            <div class="presentation-actions">
+              <button class="download-presentation-btn" onclick="downloadPresentation()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                Download Presentation
+              </button>
+            </div>
+          </div>
+        `;
+
+        saveMessage(
+          "assistant",
+          `Presentation generated: ${result.title} (${result.slides} slides)`,
+        );
+      } else {
+        contentDiv.innerHTML = `<p>❌ Failed to generate presentation. Please try again.</p>`;
+      }
+    } catch (error) {
+      if (cleanupProgress) cleanupProgress();
+      console.error("Presentation generation error:", error);
+      contentDiv.innerHTML = `<p>❌ Error: ${error.message}. Make sure Python and python-pptx are installed.</p>`;
+    } finally {
+      isGenerating = false;
+      sendButton.disabled = !messageInput.value.trim();
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+  }
+
+  function updateCanvasStep(contentDiv, progress) {
+    const step = progress.step;
+    const message = progress.message;
+
+    if (step === 1 || step === 2 || step === 3) {
+      // Mark previous steps as completed
+      for (let i = 1; i < step; i++) {
+        const prev = contentDiv.querySelector(`#canvas-step-${i}`);
+        if (prev) {
+          prev.classList.remove("active");
+          prev.classList.add("completed");
+          const icon = prev.querySelector(".canvas-step-icon");
+          if (icon) icon.innerHTML = '<div class="step-check">✓</div>';
+        }
+      }
+
+      // Mark current step as active
+      const current = contentDiv.querySelector(`#canvas-step-${step}`);
+      if (current) {
+        current.classList.add("active");
+        const icon = current.querySelector(".canvas-step-icon");
+        if (icon) icon.innerHTML = '<div class="step-spinner"></div>';
+        const text = current.querySelector(".canvas-step-text");
+        if (text) text.innerHTML = `<strong>Step ${step}:</strong> ${message}`;
+      }
+    }
+
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  }
+
+  // Global function for download button
+  window.downloadPresentation = async function () {
+    if (!currentPresentationPath) return;
+
+    try {
+      const result = await window.electronAPI.canvas.savePresentation(
+        currentPresentationPath,
+      );
+      if (result.success) {
+        addMessage(`✅ Presentation saved to: ${result.filePath}`, "assistant");
+      } else {
+        addMessage(
+          `❌ Failed to save presentation: ${result.error}`,
+          "assistant",
+        );
+      }
+    } catch (error) {
+      addMessage(`❌ Error saving presentation: ${error.message}`, "assistant");
+    }
+  };
 
   // ===== Settings Modal =====
   // Update endpoint when backend changes

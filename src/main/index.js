@@ -8,6 +8,8 @@ const {
 } = require("electron");
 const path = require("path");
 const Store = require("electron-store");
+const { spawn } = require("child_process");
+const fs = require("fs");
 
 const store = new Store();
 
@@ -178,6 +180,114 @@ ipcMain.handle("store:set", (event, key, value) => {
 ipcMain.handle("store:delete", (event, key) => {
   store.delete(key);
   return true;
+});
+
+// IPC Handler for presentation generation (3-step with progress)
+ipcMain.handle("canvas:generatePresentation", async (event, userPrompt) => {
+  return new Promise((resolve, reject) => {
+    const timestamp = Date.now();
+    const fileName = `presentation_${timestamp}.pptx`;
+    const outputPath = path.join(app.getPath("temp"), fileName);
+    const scriptPath = path.join(
+      __dirname,
+      "../scripts/presentation_generator.py",
+    );
+
+    if (!fs.existsSync(scriptPath)) {
+      reject(new Error("Presentation generator script not found"));
+      return;
+    }
+
+    const pythonProcess = spawn("python3", [
+      scriptPath,
+      userPrompt,
+      outputPath,
+    ]);
+
+    let buffer = "";
+    let lastResult = null;
+
+    pythonProcess.stdout.on("data", (data) => {
+      buffer += data.toString();
+      // Process complete JSON lines
+      const lines = buffer.split("\n");
+      buffer = lines.pop(); // keep incomplete line in buffer
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const progress = JSON.parse(line.trim());
+          lastResult = progress;
+          // Send progress to renderer
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send("canvas:progress", progress);
+          }
+        } catch (e) {
+          // ignore non-JSON lines
+        }
+      }
+    });
+
+    pythonProcess.stderr.on("data", (data) => {
+      console.error("Python stderr:", data.toString());
+    });
+
+    pythonProcess.on("close", (code) => {
+      // Process any remaining buffer
+      if (buffer.trim()) {
+        try {
+          const progress = JSON.parse(buffer.trim());
+          lastResult = progress;
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send("canvas:progress", progress);
+          }
+        } catch (e) {
+          /* ignore */
+        }
+      }
+
+      if (code === 0 && lastResult && lastResult.step === "done") {
+        const resultData = lastResult.data || {};
+        resolve({
+          success: true,
+          filePath: outputPath,
+          fileName: fileName,
+          slides: resultData.slides,
+          title: resultData.title,
+        });
+      } else if (lastResult && lastResult.step === "error") {
+        reject(
+          new Error(lastResult.message || "Presentation generation failed"),
+        );
+      } else {
+        reject(new Error("Presentation generation failed unexpectedly"));
+      }
+    });
+
+    pythonProcess.on("error", (error) => {
+      reject(new Error(`Failed to start Python process: ${error.message}`));
+    });
+  });
+});
+
+// IPC Handler for saving presentation
+ipcMain.handle("canvas:savePresentation", async (event, sourcePath) => {
+  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+    title: "Save Presentation",
+    defaultPath: path.join(app.getPath("downloads"), "presentation.pptx"),
+    filters: [{ name: "PowerPoint Presentation", extensions: ["pptx"] }],
+  });
+
+  if (!canceled && filePath) {
+    try {
+      fs.copyFileSync(sourcePath, filePath);
+      return { success: true, filePath };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  return { success: false, error: "Save canceled" };
 });
 
 // App lifecycle
