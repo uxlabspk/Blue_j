@@ -2,7 +2,7 @@
   "name": "blue-j",
   "version": "1.0.0",
   "description": "A modern chat interface for Ollama AI models",
-  "main": "main.js",
+  "main": "src/main/index.js",
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
