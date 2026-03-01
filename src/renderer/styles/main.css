@@ -412,16 +412,7 @@ body {
 }
 
 .message-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  font-size: 14px;
-  font-weight: 600;
-  margin-top: 4px;
+  display: none;
 }
 
 .message.user .message-avatar {
@@ -442,11 +433,7 @@ body {
 }
 
 .message-sender {
-  font-size: 12px;
-  font-weight: 600;
-  margin-bottom: 6px;
-  color: var(--text-secondary);
-  padding: 0 4px;
+  display: none;
 }
 
 /* User message sender aligned right */
