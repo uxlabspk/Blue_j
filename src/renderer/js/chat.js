@@ -338,6 +338,10 @@ document.addEventListener("DOMContentLoaded", () => {
       canvasMode = !canvasMode;
       canvasBtn.classList.toggle("active", canvasMode);
 
+      // Sync dropdown item
+      const dpBtn = document.getElementById("dropdown-presentation-btn");
+      if (dpBtn) dpBtn.classList.toggle("active", canvasMode);
+
       // Update placeholder text
       if (canvasMode) {
         messageInput.placeholder =
@@ -345,7 +349,61 @@ document.addEventListener("DOMContentLoaded", () => {
         // Clear any attached files when entering canvas mode
         clearAttachedFiles();
       } else {
-        messageInput.placeholder = "Message Blue j";
+        messageInput.placeholder = "Message Blue J...";
+        currentPresentationPath = null;
+      }
+
+      messageInput.focus();
+    });
+  }
+
+  // ===== Tools Dropdown =====
+  const toolsBtn = document.getElementById("tools-btn");
+  const toolsDropdown = document.getElementById("tools-dropdown");
+  const dropdownPresentationBtn = document.getElementById("dropdown-presentation-btn");
+  const dropdownAttachBtn = document.getElementById("dropdown-attach-btn");
+
+  if (toolsBtn && toolsDropdown) {
+    toolsBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isOpen = toolsDropdown.classList.contains("open");
+      toolsDropdown.classList.toggle("open", !isOpen);
+      toolsBtn.classList.toggle("active", !isOpen);
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!toolsBtn.contains(e.target) && !toolsDropdown.contains(e.target)) {
+        toolsDropdown.classList.remove("open");
+        toolsBtn.classList.remove("active");
+      }
+    });
+  }
+
+  if (dropdownAttachBtn) {
+    dropdownAttachBtn.addEventListener("click", () => {
+      if (toolsDropdown) toolsDropdown.classList.remove("open");
+      if (toolsBtn) toolsBtn.classList.remove("active");
+      fileInput.click();
+    });
+  }
+
+  if (dropdownPresentationBtn) {
+    dropdownPresentationBtn.addEventListener("click", () => {
+      // Close the dropdown
+      if (toolsDropdown) toolsDropdown.classList.remove("open");
+      if (toolsBtn) toolsBtn.classList.remove("active");
+
+      // Toggle canvas mode
+      canvasMode = !canvasMode;
+      dropdownPresentationBtn.classList.toggle("active", canvasMode);
+      if (canvasBtn) canvasBtn.classList.toggle("active", canvasMode);
+
+      if (canvasMode) {
+        messageInput.placeholder =
+          "Enter presentation topic (e.g., 'Introduction to AI')";
+        clearAttachedFiles();
+      } else {
+        messageInput.placeholder = "Message Blue J...";
         currentPresentationPath = null;
       }
 
@@ -365,6 +423,7 @@ document.addEventListener("DOMContentLoaded", () => {
     clearAttachedFiles();
     canvasMode = false;
     if (canvasBtn) canvasBtn.classList.remove("active");
+    if (dropdownPresentationBtn) dropdownPresentationBtn.classList.remove("active");
     currentPresentationPath = null;
   });
 
@@ -1050,9 +1109,12 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Event listeners for file upload
-  attachFileBtn.addEventListener("click", () => {
-    fileInput.click();
-  });
+  // (attach is now triggered via the Tools dropdown)
+  if (attachFileBtn) {
+    attachFileBtn.addEventListener("click", () => {
+      fileInput.click();
+    });
+  }
 
   fileInput.addEventListener("change", async (e) => {
     const files = Array.from(e.target.files);
