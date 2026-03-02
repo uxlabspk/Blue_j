@@ -360,7 +360,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // ===== Tools Dropdown =====
   const toolsBtn = document.getElementById("tools-btn");
   const toolsDropdown = document.getElementById("tools-dropdown");
-  const dropdownPresentationBtn = document.getElementById("dropdown-presentation-btn");
+  const dropdownPresentationBtn = document.getElementById(
+    "dropdown-presentation-btn",
+  );
   const dropdownAttachBtn = document.getElementById("dropdown-attach-btn");
 
   if (toolsBtn && toolsDropdown) {
@@ -423,7 +425,8 @@ document.addEventListener("DOMContentLoaded", () => {
     clearAttachedFiles();
     canvasMode = false;
     if (canvasBtn) canvasBtn.classList.remove("active");
-    if (dropdownPresentationBtn) dropdownPresentationBtn.classList.remove("active");
+    if (dropdownPresentationBtn)
+      dropdownPresentationBtn.classList.remove("active");
     currentPresentationPath = null;
   });
 
