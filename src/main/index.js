@@ -290,7 +290,7 @@ function findSystemChrome() {
   ];
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) return candidate;
-  }
+  } 
   return null;
 }
 
