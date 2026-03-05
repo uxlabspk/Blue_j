@@ -270,6 +270,153 @@ ipcMain.handle("canvas:generatePresentation", async (event, userPrompt) => {
   });
 });
 
+// ─── Video Generation via Remotion ───────────────────────────────────────────
+
+// Cache the webpack bundle between renders so only first render is slow
+let remotionBundleDir = null;
+
+// Find a system Chrome/Chromium — never use the Electron binary here.
+// Returns the path if found, otherwise null (Remotion will use ensureBrowser).
+function findSystemChrome() {
+  const candidates = [
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/google-chrome",
+    "/usr/bin/chromium-browser",
+    "/usr/bin/chromium",
+    "/snap/bin/chromium",
+    "/usr/bin/brave-browser",
+    "/usr/bin/microsoft-edge-stable",
+    "/usr/bin/microsoft-edge",
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+ipcMain.handle("video:render", async (event, videoData) => {
+  const { bundle } = require("@remotion/bundler");
+  const {
+    renderMedia,
+    getCompositions,
+    ensureBrowser,
+  } = require("@remotion/renderer");
+
+  const entryPoint = path.join(__dirname, "../scripts/remotion/index.jsx");
+  const outputPath = path.join(app.getPath("temp"), `video_${Date.now()}.mp4`);
+
+  // Calculate total frames from all scenes
+  const totalFrames =
+    videoData.scenes && videoData.scenes.length > 0
+      ? videoData.scenes.reduce((acc, s) => acc + (s.duration || 90), 0)
+      : 300;
+
+  const inputProps = { ...videoData, totalFrames };
+
+  // ── Step 1: Resolve the browser executable ──
+  // Prefer a system Chrome/Chromium; if none found, let Remotion download
+  // its own compatible Chromium via ensureBrowser().
+  // IMPORTANT: never pass the Electron binary — it is not a browser.
+  let browserExecutable = findSystemChrome();
+  if (!browserExecutable) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("video:progress", {
+        step: "bundling",
+        progress: 0,
+        message: "Downloading Chromium for rendering…",
+      });
+    }
+    const browserResult = await ensureBrowser();
+    browserExecutable = browserResult.executablePath || browserResult;
+  }
+
+  // ── Step 2: Bundle (cached after first call) ──
+  if (!remotionBundleDir) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("video:progress", {
+        step: "bundling",
+        progress: 0,
+        message: "Setting up video engine (first time only)…",
+      });
+    }
+    remotionBundleDir = await bundle({
+      entryPoint,
+      webpackOverride: (config) => config,
+    });
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("video:progress", {
+        step: "bundling",
+        progress: 100,
+        message: "Video engine ready",
+      });
+    }
+  }
+
+  // ── Step 3: Resolve composition with dynamic duration ──
+  const compositions = await getCompositions(remotionBundleDir, {
+    inputProps,
+    browserExecutable,
+  });
+
+  const composition = compositions.find((c) => c.id === "VideoComposition");
+  if (!composition) {
+    throw new Error("VideoComposition not found in Remotion bundle");
+  }
+
+  // Override the duration with actual scene total
+  composition.durationInFrames = totalFrames;
+
+  // ── Step 4: Render to MP4 ──
+  await renderMedia({
+    composition,
+    serveUrl: remotionBundleDir,
+    codec: "h264",
+    outputLocation: outputPath,
+    inputProps,
+    browserExecutable,
+    concurrency: 2,
+    onProgress: ({ progress }) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("video:progress", {
+          step: "rendering",
+          progress: Math.round(progress * 100),
+          message: `Rendering… ${Math.round(progress * 100)}%`,
+        });
+      }
+    },
+  });
+
+  if (!fs.existsSync(outputPath)) {
+    throw new Error("Rendered video file not found after render");
+  }
+
+  return {
+    success: true,
+    filePath: outputPath,
+    fileName: path.basename(outputPath),
+  };
+});
+
+// IPC Handler for saving the rendered video
+ipcMain.handle("video:save", async (event, sourcePath) => {
+  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+    title: "Save Video",
+    defaultPath: path.join(app.getPath("downloads"), "video.mp4"),
+    filters: [{ name: "MP4 Video", extensions: ["mp4"] }],
+  });
+
+  if (!canceled && filePath) {
+    try {
+      fs.copyFileSync(sourcePath, filePath);
+      return { success: true, filePath };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  return { success: false, error: "Save canceled" };
+});
+
 // IPC Handler for saving presentation
 ipcMain.handle("canvas:savePresentation", async (event, sourcePath) => {
   const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {

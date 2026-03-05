@@ -28,7 +28,12 @@
     "electron-builder": "^26.8.1"
   },
   "dependencies": {
-    "electron-store": "^8.1.0"
+    "@remotion/bundler": "^4.0.434",
+    "@remotion/renderer": "^4.0.434",
+    "electron-store": "^8.1.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "remotion": "^4.0.434"
   },
   "build": {
     "appId": "com.bluej.app",
