@@ -1441,7 +1441,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
               </svg>
               <span class="video-result-title">${videoData.title || "Generated Video"}</span>
-              <span class="video-result-meta">9:16 · 30 fps · Ready</span>
+              <span class="video-result-meta">9:16 · 30 fps · HD Quality · Ready</span>
             </div>
             <div class="video-player-wrapper">
               <video class="video-preview" controls playsinline>
@@ -1578,9 +1578,9 @@ document.addEventListener("DOMContentLoaded", () => {
       '  "accentColor": "#10a37f",',
       '  "bgColor": "#0a0a0a",',
       '  "scenes": [',
-      '    {"type":"title",   "duration":60, "heading":"Catchy title",  "subtext":"Short subtitle", "emoji":"🎬"},',
-      '    {"type":"content", "duration":90, "heading":"Key Points",    "emoji":"💡", "points":["Point one","Point two","Point three"]},',
-      '    {"type":"outro",   "duration":60, "heading":"Follow for more!", "subtext":"Subscribe now"}',
+      '    {"type":"title",   "duration":300, "heading":"Catchy title",  "subtext":"Short subtitle", "emoji":"🎬"},',
+      '    {"type":"content", "duration":600, "heading":"Key Points",    "emoji":"💡", "points":["Point one","Point two","Point three"]},',
+      '    {"type":"outro",   "duration":300, "heading":"Follow for more!", "subtext":"Subscribe now"}',
       "  ]",
       "}",
       "",
@@ -1590,7 +1590,7 @@ document.addEventListener("DOMContentLoaded", () => {
       "- points: 2-4 items, each ≤10 words",
       "- accentColor: a vibrant hex color matching the topic mood",
       "- 1-3 content scenes maximum",
-      "- Total scene durations must sum to ≤ 300",
+      "- Total scene durations must sum to ≤ 9000 (5 minutes at 30fps)",
     ].join("\n");
 
     const messages = [
@@ -1660,10 +1660,10 @@ document.addEventListener("DOMContentLoaded", () => {
       );
     }
 
-    // Ensure every scene has a numeric duration (default 90)
+    // Ensure every scene has a numeric duration (default 300)
     parsed.scenes = parsed.scenes.map((s) => ({
       ...s,
-      duration: Number(s.duration) || 90,
+      duration: Number(s.duration) || 300,
     }));
 
     return parsed;

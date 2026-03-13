@@ -290,7 +290,7 @@ function findSystemChrome() {
   ];
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) return candidate;
-  } 
+  }
   return null;
 }
 
@@ -371,6 +371,9 @@ ipcMain.handle("video:render", async (event, videoData) => {
     composition,
     serveUrl: remotionBundleDir,
     codec: "h264",
+    pixelFormat: "yuv420p",
+    audioBitrate: "192k",
+    videoBitrate: "8000k",
     outputLocation: outputPath,
     inputProps,
     browserExecutable,

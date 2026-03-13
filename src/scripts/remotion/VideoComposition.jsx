@@ -21,7 +21,7 @@ function hexToRgba(hex, alpha) {
 // ─── Title Scene ─────────────────────────────────────────────────────────────
 
 const TitleScene = ({ scene, frame, fps, accentColor, bgColor }) => {
-  const fadeIn = interpolate(frame, [0, 18], [0, 1], {
+  const fadeIn = interpolate(frame, [0, 60], [0, 1], {
     extrapolateRight: "clamp",
   });
   const emojiScale = spring({
@@ -31,21 +31,21 @@ const TitleScene = ({ scene, frame, fps, accentColor, bgColor }) => {
     to: 1,
     config: { damping: 70, stiffness: 180, mass: 1 },
   });
-  const titleY = interpolate(frame, [8, 28], [60, 0], {
+  const titleY = interpolate(frame, [30, 120], [60, 0], {
     extrapolateRight: "clamp",
   });
-  const titleOp = interpolate(frame, [8, 28], [0, 1], {
+  const titleOp = interpolate(frame, [30, 120], [0, 1], {
     extrapolateRight: "clamp",
   });
-  const subY = interpolate(frame, [22, 42], [40, 0], {
+  const subY = interpolate(frame, [80, 170], [40, 0], {
     extrapolateRight: "clamp",
   });
-  const subOp = interpolate(frame, [22, 42], [0, 1], {
+  const subOp = interpolate(frame, [80, 170], [0, 1], {
     extrapolateRight: "clamp",
   });
 
   // Pulse glow on accent bar
-  const glowOp = interpolate(frame, [0, 30, 60], [0.4, 1, 0.4], {
+  const glowOp = interpolate(frame, [0, 150, 300], [0.4, 1, 0.4], {
     extrapolateRight: "clamp",
   });
 
@@ -143,7 +143,7 @@ const TitleScene = ({ scene, frame, fps, accentColor, bgColor }) => {
       {/* Divider */}
       <div
         style={{
-          width: interpolate(frame, [30, 55], [0, 160], {
+          width: interpolate(frame, [100, 200], [0, 160], {
             extrapolateRight: "clamp",
           }),
           height: 4,
@@ -195,13 +195,13 @@ const TitleScene = ({ scene, frame, fps, accentColor, bgColor }) => {
 // ─── Content Scene ────────────────────────────────────────────────────────────
 
 const ContentScene = ({ scene, frame, fps, accentColor, bgColor }) => {
-  const fadeIn = interpolate(frame, [0, 18], [0, 1], {
+  const fadeIn = interpolate(frame, [0, 60], [0, 1], {
     extrapolateRight: "clamp",
   });
-  const headerY = interpolate(frame, [0, 22], [-50, 0], {
+  const headerY = interpolate(frame, [0, 100], [-50, 0], {
     extrapolateRight: "clamp",
   });
-  const headerOp = interpolate(frame, [0, 22], [0, 1], {
+  const headerOp = interpolate(frame, [0, 100], [0, 1], {
     extrapolateRight: "clamp",
   });
 
@@ -294,11 +294,11 @@ const ContentScene = ({ scene, frame, fps, accentColor, bgColor }) => {
         }}
       >
         {points.map((point, i) => {
-          const delay = 25 + i * 20;
-          const pointOp = interpolate(frame, [delay, delay + 20], [0, 1], {
+          const delay = 120 + i * 80;
+          const pointOp = interpolate(frame, [delay, delay + 60], [0, 1], {
             extrapolateRight: "clamp",
           });
-          const pointX = interpolate(frame, [delay, delay + 20], [-70, 0], {
+          const pointX = interpolate(frame, [delay, delay + 60], [-70, 0], {
             extrapolateRight: "clamp",
           });
           const dotScale = spring({
@@ -380,7 +380,7 @@ const ContentScene = ({ scene, frame, fps, accentColor, bgColor }) => {
 // ─── Outro Scene ──────────────────────────────────────────────────────────────
 
 const OutroScene = ({ scene, frame, fps, accentColor, bgColor }) => {
-  const fadeIn = interpolate(frame, [0, 18], [0, 1], {
+  const fadeIn = interpolate(frame, [0, 60], [0, 1], {
     extrapolateRight: "clamp",
   });
   const outerRingScale = spring({
@@ -397,16 +397,16 @@ const OutroScene = ({ scene, frame, fps, accentColor, bgColor }) => {
     to: 1,
     config: { damping: 90, stiffness: 160 },
   });
-  const headingOp = interpolate(frame, [12, 32], [0, 1], {
+  const headingOp = interpolate(frame, [60, 140], [0, 1], {
     extrapolateRight: "clamp",
   });
-  const headingY = interpolate(frame, [12, 32], [40, 0], {
+  const headingY = interpolate(frame, [60, 140], [40, 0], {
     extrapolateRight: "clamp",
   });
-  const subOp = interpolate(frame, [28, 48], [0, 1], {
+  const subOp = interpolate(frame, [120, 200], [0, 1], {
     extrapolateRight: "clamp",
   });
-  const lineW = interpolate(frame, [20, 55], [0, 240], {
+  const lineW = interpolate(frame, [80, 180], [0, 240], {
     extrapolateRight: "clamp",
   });
 

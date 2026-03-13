@@ -7,15 +7,15 @@ export const RemotionRoot = () => {
     <Composition
       id="VideoComposition"
       component={VideoComposition}
-      durationInFrames={300}
+      durationInFrames={9000}
       fps={30}
       width={1080}
       height={1920}
       calculateMetadata={({ props }) => {
         const totalFrames =
           props.scenes && props.scenes.length > 0
-            ? props.scenes.reduce((acc, s) => acc + (s.duration || 90), 0)
-            : 300;
+            ? props.scenes.reduce((acc, s) => acc + (s.duration || 300), 0)
+            : 9000;
         return { durationInFrames: totalFrames };
       }}
       defaultProps={{
@@ -23,28 +23,28 @@ export const RemotionRoot = () => {
         scenes: [
           {
             type: "title",
-            duration: 90,
+            duration: 300,
             heading: "My Awesome Video",
             subtext: "Made with Blue J",
             emoji: "🎬",
           },
           {
             type: "content",
-            duration: 120,
+            duration: 600,
             heading: "Key Points",
             emoji: "💡",
             points: ["Point one here", "Point two here", "Point three here"],
           },
           {
             type: "outro",
-            duration: 90,
+            duration: 300,
             heading: "Follow for more!",
             subtext: "Subscribe now",
           },
         ],
         accentColor: "#10a37f",
         bgColor: "#0a0a0a",
-        totalFrames: 300,
+        totalFrames: 9000,
       }}
     />
   );
