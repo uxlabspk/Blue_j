@@ -26,9 +26,6 @@ document.addEventListener("DOMContentLoaded", () => {
   let abortController = null;
   let currentChatId = null;
   let attachedFiles = [];
-  let canvasMode = false;
-  let videoMode = false;
-  let currentPresentationPath = null;
 
   // ===== Conversation Storage =====
   const STORAGE_KEY = "ollama_conversations";
@@ -332,32 +329,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   sendButton.addEventListener("click", sendMessage);
 
-  // ===== Canvas Mode Toggle =====
-  const canvasBtn = document.getElementById("canvas-btn");
-  if (canvasBtn) {
-    canvasBtn.addEventListener("click", () => {
-      canvasMode = !canvasMode;
-      canvasBtn.classList.toggle("active", canvasMode);
-
-      // Sync dropdown item
-      const dpBtn = document.getElementById("dropdown-presentation-btn");
-      if (dpBtn) dpBtn.classList.toggle("active", canvasMode);
-
-      // Update placeholder text
-      if (canvasMode) {
-        messageInput.placeholder =
-          "Enter presentation topic (e.g., 'Introduction to AI')";
-        // Clear any attached files when entering canvas mode
-        clearAttachedFiles();
-      } else {
-        messageInput.placeholder = "Message Blue J...";
-        currentPresentationPath = null;
-      }
-
-      messageInput.focus();
-    });
-  }
-
   // ===== Tools Dropdown =====
   const toolsBtn = document.getElementById("tools-btn");
   const toolsDropdown = document.getElementById("tools-dropdown");
@@ -388,36 +359,6 @@ document.addEventListener("DOMContentLoaded", () => {
       if (toolsDropdown) toolsDropdown.classList.remove("open");
       if (toolsBtn) toolsBtn.classList.remove("active");
       fileInput.click();
-    });
-  }
-
-  if (dropdownPresentationBtn) {
-    dropdownPresentationBtn.addEventListener("click", () => {
-      // Close the dropdown
-      if (toolsDropdown) toolsDropdown.classList.remove("open");
-      if (toolsBtn) toolsBtn.classList.remove("active");
-
-      // Toggle canvas mode
-      canvasMode = !canvasMode;
-      dropdownPresentationBtn.classList.toggle("active", canvasMode);
-      if (canvasBtn) canvasBtn.classList.toggle("active", canvasMode);
-
-      // Deactivate video mode if switching to presentation mode
-      if (canvasMode && videoMode) {
-        videoMode = false;
-        if (dropdownVideoBtn) dropdownVideoBtn.classList.remove("active");
-      }
-
-      if (canvasMode) {
-        messageInput.placeholder =
-          "Enter presentation topic (e.g., 'Introduction to AI')";
-        clearAttachedFiles();
-      } else {
-        messageInput.placeholder = "Message Blue J...";
-        currentPresentationPath = null;
-      }
-
-      messageInput.focus();
     });
   }
 
@@ -462,13 +403,6 @@ document.addEventListener("DOMContentLoaded", () => {
     messageInput.style.height = "auto";
     sendButton.disabled = true;
     clearAttachedFiles();
-    canvasMode = false;
-    videoMode = false;
-    if (canvasBtn) canvasBtn.classList.remove("active");
-    if (dropdownPresentationBtn)
-      dropdownPresentationBtn.classList.remove("active");
-    if (dropdownVideoBtn) dropdownVideoBtn.classList.remove("active");
-    currentPresentationPath = null;
     messageInput.placeholder = "Message Blue J...";
   });
 
@@ -602,8 +536,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const code = pre.querySelector("code");
       const lang = code
         ? [...code.classList]
-            .find((c) => c.startsWith("language-"))
-            ?.replace("language-", "") || ""
+          .find((c) => c.startsWith("language-"))
+          ?.replace("language-", "") || ""
         : "";
 
       const header = document.createElement("div");
@@ -1189,18 +1123,6 @@ document.addEventListener("DOMContentLoaded", () => {
     // Create conversation on first message
     ensureConversation(message);
 
-    // Check if canvas mode is active
-    if (canvasMode && window.electronAPI && window.electronAPI.canvas) {
-      await handleCanvasMode(message);
-      return;
-    }
-
-    // Check if video mode is active
-    if (videoMode && window.electronAPI && window.electronAPI.video) {
-      await handleVideoMode(message);
-      return;
-    }
-
     // Build message with file context if files are attached
     let messageWithContext = message;
     if (attachedFiles.length > 0) {
@@ -1220,283 +1142,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     await generateResponse(messageWithContext);
-  }
-
-  // ===== Canvas Mode Handler (3-step progress) =====
-  async function handleCanvasMode(userPrompt) {
-    addMessage(`🎨 Create presentation: "${userPrompt}"`, "user");
-
-    // Build the progress tracker UI
-    const contentDiv = createMessageElement("assistant");
-    contentDiv.innerHTML = `
-      <div class="canvas-progress">
-        <div class="canvas-step active" id="canvas-step-1">
-          <div class="canvas-step-icon">
-            <div class="step-spinner"></div>
-          </div>
-          <div class="canvas-step-text">
-            <strong>Step 1:</strong> Understanding your prompt...
-          </div>
-        </div>
-        <div class="canvas-step" id="canvas-step-2">
-          <div class="canvas-step-icon">
-            <div class="step-number">2</div>
-          </div>
-          <div class="canvas-step-text">
-            <strong>Step 2:</strong> Generating slide content
-          </div>
-        </div>
-        <div class="canvas-step" id="canvas-step-3">
-          <div class="canvas-step-icon">
-            <div class="step-number">3</div>
-          </div>
-          <div class="canvas-step-text">
-            <strong>Step 3:</strong> Building presentation file
-          </div>
-        </div>
-      </div>
-    `;
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-
-    // Listen for progress updates from the Python script
-    let cleanupProgress = null;
-    if (window.electronAPI.canvas.onProgress) {
-      cleanupProgress = window.electronAPI.canvas.onProgress((progress) => {
-        updateCanvasStep(contentDiv, progress);
-      });
-    }
-
-    try {
-      const result =
-        await window.electronAPI.canvas.generatePresentation(userPrompt);
-
-      // Clean up progress listener
-      if (cleanupProgress) cleanupProgress();
-
-      if (result.success) {
-        currentPresentationPath = result.filePath;
-
-        // Replace progress UI with final result
-        contentDiv.innerHTML = `
-          <div class="canvas-progress">
-            <div class="canvas-step completed" id="canvas-step-1">
-              <div class="canvas-step-icon"><div class="step-check">✓</div></div>
-              <div class="canvas-step-text"><strong>Step 1:</strong> Topic identified</div>
-            </div>
-            <div class="canvas-step completed" id="canvas-step-2">
-              <div class="canvas-step-icon"><div class="step-check">✓</div></div>
-              <div class="canvas-step-text"><strong>Step 2:</strong> Content generated</div>
-            </div>
-            <div class="canvas-step completed" id="canvas-step-3">
-              <div class="canvas-step-icon"><div class="step-check">✓</div></div>
-              <div class="canvas-step-text"><strong>Step 3:</strong> File created</div>
-            </div>
-          </div>
-          <div class="presentation-preview">
-            <div class="presentation-header">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#10a37f" stroke-width="2">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                <line x1="3" y1="9" x2="21" y2="9"></line>
-                <line x1="9" y1="21" x2="9" y2="9"></line>
-              </svg>
-              <div class="presentation-info">
-                <h3>${result.title}</h3>
-                <p>${result.slides} slides · Ready to download</p>
-              </div>
-            </div>
-            <div class="presentation-actions">
-              <button class="download-presentation-btn" onclick="downloadPresentation()">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                  <polyline points="7 10 12 15 17 10"></polyline>
-                  <line x1="12" y1="15" x2="12" y2="3"></line>
-                </svg>
-                Download Presentation
-              </button>
-            </div>
-          </div>
-        `;
-
-        saveMessage(
-          "assistant",
-          `Presentation generated: ${result.title} (${result.slides} slides)`,
-        );
-      } else {
-        contentDiv.innerHTML = `<p>❌ Failed to generate presentation. Please try again.</p>`;
-      }
-    } catch (error) {
-      if (cleanupProgress) cleanupProgress();
-      console.error("Presentation generation error:", error);
-      contentDiv.innerHTML = `<p>❌ Error: ${error.message}. Make sure Python and python-pptx are installed.</p>`;
-    } finally {
-      isGenerating = false;
-      sendButton.disabled = !messageInput.value.trim();
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    }
-  }
-
-  function updateCanvasStep(contentDiv, progress) {
-    const step = progress.step;
-    const message = progress.message;
-
-    if (step === 1 || step === 2 || step === 3) {
-      // Mark previous steps as completed
-      for (let i = 1; i < step; i++) {
-        const prev = contentDiv.querySelector(`#canvas-step-${i}`);
-        if (prev) {
-          prev.classList.remove("active");
-          prev.classList.add("completed");
-          const icon = prev.querySelector(".canvas-step-icon");
-          if (icon) icon.innerHTML = '<div class="step-check">✓</div>';
-        }
-      }
-
-      // Mark current step as active
-      const current = contentDiv.querySelector(`#canvas-step-${step}`);
-      if (current) {
-        current.classList.add("active");
-        const icon = current.querySelector(".canvas-step-icon");
-        if (icon) icon.innerHTML = '<div class="step-spinner"></div>';
-        const text = current.querySelector(".canvas-step-text");
-        if (text) text.innerHTML = `<strong>Step ${step}:</strong> ${message}`;
-      }
-    }
-
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-  }
-
-  // ===== Video Mode Handler =====
-  async function handleVideoMode(userPrompt) {
-    addMessage(`🎬 Generate video: "${userPrompt}"`, "user");
-
-    // Build the 2-step progress tracker UI (reuse canvas-step classes)
-    const contentDiv = createMessageElement("assistant");
-    contentDiv.innerHTML = `
-      <div class="canvas-progress">
-        <div class="canvas-step active" id="video-step-1">
-          <div class="canvas-step-icon">
-            <div class="step-spinner"></div>
-          </div>
-          <div class="canvas-step-text">
-            <strong>Step 1:</strong> Analysing your idea with AI…
-          </div>
-        </div>
-        <div class="canvas-step" id="video-step-2">
-          <div class="canvas-step-icon">
-            <div class="step-number">2</div>
-          </div>
-          <div class="canvas-step-text">
-            <strong>Step 2:</strong> Rendering video (9:16)
-          </div>
-        </div>
-      </div>
-    `;
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-
-    // Subscribe to render progress from main process
-    let cleanupProgress = null;
-    if (window.electronAPI.video && window.electronAPI.video.onProgress) {
-      cleanupProgress = window.electronAPI.video.onProgress((progress) => {
-        _updateVideoProgress(contentDiv, progress);
-      });
-    }
-
-    try {
-      // ── Step 1: Ask the model to generate a structured video script ──
-      const videoData = await generateVideoScript(userPrompt);
-
-      // Mark step 1 complete, activate step 2
-      const step1El = contentDiv.querySelector("#video-step-1");
-      if (step1El) {
-        step1El.classList.remove("active");
-        step1El.classList.add("completed");
-        step1El.querySelector(".canvas-step-icon").innerHTML =
-          '<div class="step-check">✓</div>';
-        step1El.querySelector(".canvas-step-text").innerHTML =
-          "<strong>Step 1:</strong> Video script created ✓";
-      }
-      const step2El = contentDiv.querySelector("#video-step-2");
-      if (step2El) {
-        step2El.classList.add("active");
-        step2El.querySelector(".canvas-step-icon").innerHTML =
-          '<div class="step-spinner"></div>';
-        step2El.querySelector(".canvas-step-text").innerHTML =
-          "<strong>Step 2:</strong> Rendering video… 0%";
-      }
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
-
-      // ── Step 2: Render the video with Remotion via IPC ──
-      const result = await window.electronAPI.video.render(videoData);
-      if (cleanupProgress) cleanupProgress();
-
-      if (result.success) {
-        // Build a safe file URI for the <video> element
-        const fileUri = `file://${result.filePath}`;
-
-        contentDiv.innerHTML = `
-          <div class="video-result">
-            <div class="video-result-header">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="23 7 16 12 23 17 23 7"></polygon>
-                <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
-              </svg>
-              <span class="video-result-title">${videoData.title || "Generated Video"}</span>
-              <span class="video-result-meta">9:16 · 30 fps · HD Quality · Ready</span>
-            </div>
-            <div class="video-player-wrapper">
-              <video class="video-preview" controls playsinline>
-                <source src="${fileUri}" type="video/mp4">
-                Your browser does not support the video tag.
-              </video>
-            </div>
-            <div class="video-actions">
-              <button class="download-video-btn" onclick="window.downloadVideo('${result.filePath.replace(/'/g, "\\'")}')">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                  <polyline points="7 10 12 15 17 10"></polyline>
-                  <line x1="12" y1="15" x2="12" y2="3"></line>
-                </svg>
-                Download MP4
-              </button>
-            </div>
-          </div>
-        `;
-        saveMessage(
-          "assistant",
-          `Video generated: ${videoData.title || "Video"}`,
-        );
-      } else {
-        contentDiv.innerHTML = `<p>❌ Failed to render video. Please try again.</p>`;
-      }
-    } catch (error) {
-      if (cleanupProgress) cleanupProgress();
-      console.error("Video generation error:", error);
-      contentDiv.innerHTML = `
-        <div style="color:var(--text-primary);line-height:1.6;">
-          <p style="margin-bottom:8px;">❌ <strong>Video error:</strong></p>
-          <pre style="white-space:pre-wrap;font-size:12px;color:var(--text-muted);background:var(--bg-secondary);padding:10px;border-radius:8px;border:1px solid var(--border-color);overflow-wrap:break-word;">${error.message.replace(/</g, "&lt;")}</pre>
-        </div>
-      `;
-    } finally {
-      isGenerating = false;
-      sendButton.disabled = !messageInput.value.trim();
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    }
-  }
-
-  function _updateVideoProgress(contentDiv, progress) {
-    const step2El = contentDiv.querySelector("#video-step-2");
-    if (!step2El) return;
-
-    if (progress.step === "bundling") {
-      step2El.querySelector(".canvas-step-text").innerHTML =
-        `<strong>Step 2:</strong> ${progress.message || "Setting up video engine…"}`;
-    } else if (progress.step === "rendering") {
-      const pct = progress.progress || 0;
-      step2El.querySelector(".canvas-step-text").innerHTML =
-        `<strong>Step 2:</strong> Rendering video… ${pct}%`;
-    }
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
   }
 
   // ── Robust JSON repair for common LLM formatting issues ──
@@ -1538,7 +1183,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (start === -1 || end === -1) {
       throw new Error(
         "AI did not return a JSON object.\n\nRaw response:\n" +
-          raw.slice(0, 400),
+        raw.slice(0, 400),
       );
     }
     cleaned = cleaned.slice(start, end + 1);
@@ -1557,153 +1202,15 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (err) {
       throw new Error(
         "Could not parse AI response as JSON.\n\n" +
-          "Parse error: " +
-          err.message +
-          "\n\nRaw AI output (first 500 chars):\n" +
-          raw.slice(0, 500),
+        "Parse error: " +
+        err.message +
+        "\n\nRaw AI output (first 500 chars):\n" +
+        raw.slice(0, 500),
       );
     }
   }
 
-  async function generateVideoScript(userPrompt) {
-    const systemPrompt = [
-      "You are a JSON-only API. You MUST respond with a single raw JSON object.",
-      "DO NOT use markdown fences, comments, or any text outside the JSON.",
-      "All property names and string values MUST use straight double-quote characters.",
-      "NO trailing commas anywhere.",
-      "",
-      "Return exactly this structure (fill in the values):",
-      "{",
-      '  "title": "Short memorable title",',
-      '  "accentColor": "#10a37f",',
-      '  "bgColor": "#0a0a0a",',
-      '  "scenes": [',
-      '    {"type":"title",   "duration":300, "heading":"Catchy title",  "subtext":"Short subtitle", "emoji":"🎬"},',
-      '    {"type":"content", "duration":600, "heading":"Key Points",    "emoji":"💡", "points":["Point one","Point two","Point three"]},',
-      '    {"type":"outro",   "duration":300, "heading":"Follow for more!", "subtext":"Subscribe now"}',
-      "  ]",
-      "}",
-      "",
-      "Rules:",
-      "- heading: ≤6 words",
-      "- subtext: ≤8 words",
-      "- points: 2-4 items, each ≤10 words",
-      "- accentColor: a vibrant hex color matching the topic mood",
-      "- 1-3 content scenes maximum",
-      "- Total scene durations must sum to ≤ 9000 (5 minutes at 30fps)",
-    ].join("\n");
 
-    const messages = [
-      { role: "system", content: systemPrompt },
-      {
-        role: "user",
-        content: `Create a 9:16 short video about: ${userPrompt}`,
-      },
-    ];
-
-    const backend = userSettings.backend || "ollama";
-    const chatPath = BACKEND_DEFAULTS[backend].chatPath;
-    const endpoint = getApiEndpoint(chatPath);
-
-    // Build the request body — ask the backend to enforce JSON output where possible
-    const requestBody = {
-      model: userSettings.model || "NeuralNexusLab/HacKing:latest",
-      messages,
-      stream: false,
-    };
-
-    if (backend === "ollama") {
-      // Ollama's native JSON mode — forces the model to output only valid JSON
-      requestBody.format = "json";
-    } else {
-      // OpenAI-compatible backends (llama.cpp, LM Studio)
-      requestBody.response_format = { type: "json_object" };
-    }
-
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(requestBody),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text().catch(() => "");
-      throw new Error(
-        `AI request failed (${response.status} ${response.statusText})` +
-          (errText ? ": " + errText.slice(0, 200) : ""),
-      );
-    }
-
-    const data = await response.json();
-    let rawContent = "";
-    if (backend === "ollama") {
-      rawContent = data.message?.content || "";
-    } else {
-      rawContent = data.choices?.[0]?.message?.content || "";
-    }
-
-    if (!rawContent.trim()) {
-      throw new Error("AI returned an empty response. Try again.");
-    }
-
-    const parsed = parseModelJSON(rawContent);
-
-    // Validate minimal structure
-    if (
-      !parsed.scenes ||
-      !Array.isArray(parsed.scenes) ||
-      parsed.scenes.length === 0
-    ) {
-      throw new Error(
-        'Video script is missing a "scenes" array.\n\nRaw AI output:\n' +
-          rawContent.slice(0, 400),
-      );
-    }
-
-    // Ensure every scene has a numeric duration (default 300)
-    parsed.scenes = parsed.scenes.map((s) => ({
-      ...s,
-      duration: Number(s.duration) || 300,
-    }));
-
-    return parsed;
-  }
-
-  // Global download handler for rendered videos
-  window.downloadVideo = async function (filePath) {
-    if (!filePath || !window.electronAPI || !window.electronAPI.video) return;
-    try {
-      const result = await window.electronAPI.video.save(filePath);
-      if (result.success) {
-        addMessage(`✅ Video saved to: ${result.filePath}`, "assistant");
-      } else {
-        addMessage(`❌ Failed to save video: ${result.error}`, "assistant");
-      }
-    } catch (error) {
-      addMessage(`❌ Error saving video: ${error.message}`, "assistant");
-    }
-  };
-
-  // Global function for download button
-  window.downloadPresentation = async function () {
-    if (!currentPresentationPath) return;
-
-    try {
-      const result = await window.electronAPI.canvas.savePresentation(
-        currentPresentationPath,
-      );
-      if (result.success) {
-        addMessage(`✅ Presentation saved to: ${result.filePath}`, "assistant");
-      } else {
-        addMessage(
-          `❌ Failed to save presentation: ${result.error}`,
-          "assistant",
-        );
-      }
-    } catch (error) {
-      addMessage(`❌ Error saving presentation: ${error.message}`, "assistant");
-    }
-  };
 
   // ===== Settings Modal =====
   // Update endpoint when backend changes

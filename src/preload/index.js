@@ -26,32 +26,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   // Check if running in Electron
   isElectron: true,
-
-  // Canvas/Presentation generation
-  canvas: {
-    generatePresentation: (prompt) =>
-      ipcRenderer.invoke("canvas:generatePresentation", prompt),
-    savePresentation: (sourcePath) =>
-      ipcRenderer.invoke("canvas:savePresentation", sourcePath),
-    onProgress: (callback) => {
-      const handler = (_event, data) => callback(data);
-      ipcRenderer.on("canvas:progress", handler);
-      // Return cleanup function
-      return () => ipcRenderer.removeListener("canvas:progress", handler);
-    },
-  },
-
-  // Video generation via Remotion
-  video: {
-    render: (videoData) => ipcRenderer.invoke("video:render", videoData),
-    save: (sourcePath) => ipcRenderer.invoke("video:save", sourcePath),
-    onProgress: (callback) => {
-      const handler = (_event, data) => callback(data);
-      ipcRenderer.on("video:progress", handler);
-      // Return cleanup function
-      return () => ipcRenderer.removeListener("video:progress", handler);
-    },
-  },
 });
 
 // Log that preload script loaded successfully
