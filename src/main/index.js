@@ -5,6 +5,7 @@ const {
   shell,
   ipcMain,
   dialog,
+  safeStorage,
 } = require("electron");
 const path = require("path");
 const Store = require("electron-store");
@@ -179,6 +180,45 @@ ipcMain.handle("store:set", (event, key, value) => {
 
 ipcMain.handle("store:delete", (event, key) => {
   store.delete(key);
+  return true;
+});
+
+// IPC Handlers for encrypted secret storage
+ipcMain.handle("secure:get", (event, key) => {
+  const encrypted = store.get(`secure:${key}`);
+  if (!encrypted || typeof encrypted !== "string") {
+    return null;
+  }
+
+  if (!safeStorage.isEncryptionAvailable()) {
+    return null;
+  }
+
+  try {
+    const buffer = Buffer.from(encrypted, "base64");
+    return safeStorage.decryptString(buffer);
+  } catch (error) {
+    console.error("Failed to decrypt secure value:", error);
+    return null;
+  }
+});
+
+ipcMain.handle("secure:set", (event, key, value) => {
+  if (typeof value !== "string") {
+    throw new Error("Secure value must be a string");
+  }
+
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error("Secure storage is not available on this system");
+  }
+
+  const encrypted = safeStorage.encryptString(value);
+  store.set(`secure:${key}`, encrypted.toString("base64"));
+  return true;
+});
+
+ipcMain.handle("secure:delete", (event, key) => {
+  store.delete(`secure:${key}`);
   return true;
 });
 

@@ -13,6 +13,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
     delete: (key) => ipcRenderer.invoke("store:delete", key),
   },
 
+  // Encrypted secret store for sensitive values (API keys)
+  secureStore: {
+    get: (key) => ipcRenderer.invoke("secure:get", key),
+    set: (key, value) => ipcRenderer.invoke("secure:set", key, value),
+    delete: (key) => ipcRenderer.invoke("secure:delete", key),
+  },
+
   // Menu actions
   onNewChat: (callback) => {
     ipcRenderer.on("new-chat", callback);

@@ -15,9 +15,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const saveSettingsBtn = document.getElementById("save-settings-btn");
   const backendSelect = document.getElementById("backend-select");
   const endpointInput = document.getElementById("endpoint-input");
+  const endpointHelpText = document.getElementById("endpoint-help-text");
   const modelSelect = document.getElementById("model-select");
   const usernameInput = document.getElementById("username-input");
   const systemPromptInput = document.getElementById("system-prompt-input");
+  const mistralApiKeyGroup = document.getElementById("mistral-api-key-group");
+  const mistralApiKeyInput = document.getElementById("mistral-api-key-input");
+  const mistralKeyStatus = document.getElementById("mistral-key-status");
+  const clearMistralKeyBtn = document.getElementById("clear-mistral-key-btn");
   const fileInput = document.getElementById("file-input");
   const attachFileBtn = document.getElementById("attach-file-btn");
   const fileAttachmentsContainer = document.getElementById("file-attachments");
@@ -30,6 +35,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // ===== Conversation Storage =====
   const STORAGE_KEY = "ollama_conversations";
   const SETTINGS_KEY = "ollama_settings";
+  const MISTRAL_API_KEY_SECRET = "mistral_api_key";
 
   // ===== Electron Integration =====
   // Listen for menu shortcuts from Electron
@@ -61,28 +67,29 @@ document.addEventListener("DOMContentLoaded", () => {
       modelsPath: "/v1/models",
       chatPath: "/v1/chat/completions",
     },
+    mistral: {
+      endpoint: "https://api.mistral.ai",
+      modelsPath: "/v1/models",
+      chatPath: "/v1/chat/completions",
+    },
   };
+
+  function defaultUserSettings() {
+    return {
+      username: "",
+      systemPrompt: "",
+      model: "NeuralNexusLab/HacKing:latest",
+      backend: "ollama",
+      endpoint: BACKEND_DEFAULTS.ollama.endpoint,
+    };
+  }
 
   function loadSettings() {
     try {
       const settings = JSON.parse(localStorage.getItem(SETTINGS_KEY));
-      return (
-        settings || {
-          username: "",
-          systemPrompt: "",
-          model: "NeuralNexusLab/HacKing:latest",
-          backend: "ollama",
-          endpoint: BACKEND_DEFAULTS.ollama.endpoint,
-        }
-      );
+      return settings || defaultUserSettings();
     } catch {
-      return {
-        username: "",
-        systemPrompt: "",
-        model: "NeuralNexusLab/HacKing:latest",
-        backend: "ollama",
-        endpoint: BACKEND_DEFAULTS.ollama.endpoint,
-      };
+      return defaultUserSettings();
     }
   }
 
@@ -93,24 +100,123 @@ document.addEventListener("DOMContentLoaded", () => {
   let userSettings = loadSettings();
   let availableModels = [];
 
+  async function getSecureValue(key) {
+    if (window.electronAPI?.secureStore?.get) {
+      return window.electronAPI.secureStore.get(key);
+    }
+    return null;
+  }
+
+  async function setSecureValue(key, value) {
+    if (window.electronAPI?.secureStore?.set) {
+      return window.electronAPI.secureStore.set(key, value);
+    }
+    throw new Error("Secure storage is unavailable");
+  }
+
+  async function deleteSecureValue(key) {
+    if (window.electronAPI?.secureStore?.delete) {
+      return window.electronAPI.secureStore.delete(key);
+    }
+    return false;
+  }
+
+  async function getMistralApiKey() {
+    const value = await getSecureValue(MISTRAL_API_KEY_SECRET);
+    return typeof value === "string" ? value.trim() : "";
+  }
+
   // Get API endpoint for current backend
   function getApiEndpoint(path) {
     const backend = userSettings.backend || "ollama";
-    const endpoint =
-      userSettings.endpoint || BACKEND_DEFAULTS[backend].endpoint;
+    const backendConfig = BACKEND_DEFAULTS[backend] || BACKEND_DEFAULTS.ollama;
+    const endpoint = userSettings.endpoint || backendConfig.endpoint;
     return `${endpoint}${path}`;
   }
 
-  // Fetch available models from backend
-  async function fetchAvailableModels() {
-    try {
-      const backend = userSettings.backend || "ollama";
-      const modelsPath = BACKEND_DEFAULTS[backend].modelsPath;
-      const endpoint = getApiEndpoint(modelsPath);
+  async function getBackendHeaders(backend, includeContentType = false) {
+    const headers = {};
 
-      const response = await fetch(endpoint);
+    if (includeContentType) {
+      headers["Content-Type"] = "application/json";
+    }
+
+    if (backend === "mistral") {
+      const apiKey = await getMistralApiKey();
+      if (!apiKey) {
+        throw new Error(
+          "Mistral API key is missing. Open Settings and add your key.",
+        );
+      }
+      headers.Authorization = `Bearer ${apiKey}`;
+    }
+
+    return headers;
+  }
+
+  async function buildHttpError(response, fallbackMessage) {
+    const status = `${response.status} ${response.statusText}`.trim();
+    let detail = "";
+
+    try {
+      const data = await response.json();
+      detail =
+        data?.error?.message ||
+        data?.message ||
+        data?.detail ||
+        (typeof data === "string" ? data : "");
+    } catch {
+      try {
+        detail = (await response.text()).trim();
+      } catch {
+        detail = "";
+      }
+    }
+
+    if (detail) {
+      return new Error(`${fallbackMessage} (${status}): ${detail}`);
+    }
+
+    return new Error(`${fallbackMessage} (${status})`);
+  }
+
+  function extractContentFromChunkLine(line, backend) {
+    const normalized = line.startsWith("data:") ? line.slice(5).trim() : line;
+
+    if (!normalized || normalized === "[DONE]") {
+      return "";
+    }
+
+    const data = JSON.parse(normalized);
+
+    if (backend === "ollama") {
+      // Ollama format: data.message.content
+      return data.message?.content || "";
+    }
+
+    // OpenAI-compatible streaming format
+    return (
+      data.choices?.[0]?.delta?.content ||
+      data.choices?.[0]?.message?.content ||
+      ""
+    );
+  }
+
+  // Fetch available models from backend
+  async function fetchAvailableModels(backendOverride, endpointOverride) {
+    try {
+      const backend = backendOverride || userSettings.backend || "ollama";
+      const backendConfig =
+        BACKEND_DEFAULTS[backend] || BACKEND_DEFAULTS.ollama;
+      const modelsPath = backendConfig.modelsPath;
+      const endpointBase =
+        endpointOverride || userSettings.endpoint || backendConfig.endpoint;
+      const endpoint = `${endpointBase}${modelsPath}`;
+      const headers = await getBackendHeaders(backend);
+
+      const response = await fetch(endpoint, { headers });
       if (!response.ok) {
-        throw new Error("Failed to fetch models");
+        throw await buildHttpError(response, "Failed to fetch models");
       }
       const data = await response.json();
 
@@ -118,7 +224,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (backend === "ollama") {
         availableModels = data.models || [];
       } else {
-        // llama.cpp and LM Studio use OpenAI-compatible format
+        // OpenAI-compatible model list (llama.cpp, LM Studio, Mistral)
         availableModels = (data.data || []).map((model) => ({
           name: model.id,
           model: model.id,
@@ -128,7 +234,7 @@ document.addEventListener("DOMContentLoaded", () => {
       updateModelSelect();
     } catch (error) {
       console.error("Error fetching models:", error);
-      modelSelect.innerHTML = '<option value="">Failed to load models</option>';
+      modelSelect.innerHTML = `<option value="">${error.message}</option>`;
     }
   }
 
@@ -536,8 +642,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const code = pre.querySelector("code");
       const lang = code
         ? [...code.classList]
-          .find((c) => c.startsWith("language-"))
-          ?.replace("language-", "") || ""
+            .find((c) => c.startsWith("language-"))
+            ?.replace("language-", "") || ""
         : "";
 
       const header = document.createElement("div");
@@ -838,8 +944,11 @@ document.addEventListener("DOMContentLoaded", () => {
       });
 
       const backend = userSettings.backend || "ollama";
-      const chatPath = BACKEND_DEFAULTS[backend].chatPath;
+      const backendConfig =
+        BACKEND_DEFAULTS[backend] || BACKEND_DEFAULTS.ollama;
+      const chatPath = backendConfig.chatPath;
       const endpoint = getApiEndpoint(chatPath);
+      const headers = await getBackendHeaders(backend, true);
 
       const requestBody = {
         model: userSettings.model || "NeuralNexusLab/HacKing:latest",
@@ -849,15 +958,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const response = await fetch(endpoint, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers,
         body: JSON.stringify(requestBody),
         signal: abortController.signal,
       });
 
       if (!response.ok) {
-        throw new Error("Network response was not ok");
+        throw await buildHttpError(response, "Request failed");
       }
 
       // Remove typing indicator
@@ -869,28 +976,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+      let pendingChunk = "";
 
       while (true) {
         const { done, value } = await reader.read();
 
         if (done) break;
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split("\n").filter((line) => line.trim());
+        pendingChunk += decoder.decode(value, { stream: true });
+        const lines = pendingChunk.split("\n");
+        pendingChunk = lines.pop() || "";
 
         for (const line of lines) {
-          try {
-            const data = JSON.parse(line);
-            const backend = userSettings.backend || "ollama";
+          const trimmed = line.trim();
+          if (!trimmed) continue;
 
-            let content = "";
-            if (backend === "ollama") {
-              // Ollama format: data.message.content
-              content = data.message?.content || "";
-            } else {
-              // OpenAI format (llama.cpp, LM Studio): data.choices[0].delta.content
-              content = data.choices?.[0]?.delta?.content || "";
-            }
+          try {
+            const backend = userSettings.backend || "ollama";
+            const content = extractContentFromChunkLine(trimmed, backend);
 
             if (content) {
               fullResponse += content;
@@ -898,9 +1001,31 @@ document.addEventListener("DOMContentLoaded", () => {
               messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }
           } catch (e) {
-            console.warn("Failed to parse line:", line);
+            console.warn("Failed to parse stream line:", trimmed);
           }
         }
+      }
+
+      // Flush any remaining partial line after stream completion
+      const finalLine = pendingChunk.trim();
+      if (finalLine) {
+        try {
+          const backend = userSettings.backend || "ollama";
+          const content = extractContentFromChunkLine(finalLine, backend);
+          if (content) {
+            fullResponse += content;
+            contentDiv.innerHTML = marked.parse(fullResponse);
+          }
+        } catch (e) {
+          console.warn("Failed to parse final stream line:", finalLine);
+        }
+      }
+
+      if (!fullResponse.trim()) {
+        contentDiv.parentElement?.parentElement?.remove();
+        throw new Error(
+          "No response content received. Check your selected model and backend settings.",
+        );
       }
 
       // Calculate statistics
@@ -933,10 +1058,7 @@ document.addEventListener("DOMContentLoaded", () => {
       } else {
         console.error("Error sending message:", error);
         typingIndicator.parentElement?.parentElement?.remove();
-        addMessage(
-          "Failed to send message. Please check if Blue J is running.",
-          "assistant",
-        );
+        addMessage(error.message || "Failed to send message.", "assistant");
       }
     } finally {
       isGenerating = false;
@@ -1183,7 +1305,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (start === -1 || end === -1) {
       throw new Error(
         "AI did not return a JSON object.\n\nRaw response:\n" +
-        raw.slice(0, 400),
+          raw.slice(0, 400),
       );
     }
     cleaned = cleaned.slice(start, end + 1);
@@ -1202,32 +1324,76 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (err) {
       throw new Error(
         "Could not parse AI response as JSON.\n\n" +
-        "Parse error: " +
-        err.message +
-        "\n\nRaw AI output (first 500 chars):\n" +
-        raw.slice(0, 500),
+          "Parse error: " +
+          err.message +
+          "\n\nRaw AI output (first 500 chars):\n" +
+          raw.slice(0, 500),
       );
     }
   }
 
-
-
   // ===== Settings Modal =====
-  // Update endpoint when backend changes
-  backendSelect.addEventListener("change", () => {
-    const backend = backendSelect.value;
-    endpointInput.value = BACKEND_DEFAULTS[backend].endpoint;
-  });
+  function updateSettingsUiForBackend(backend) {
+    const isMistral = backend === "mistral";
 
-  settingsBtn.addEventListener("click", () => {
-    backendSelect.value = userSettings.backend || "ollama";
+    mistralApiKeyGroup.style.display = isMistral ? "block" : "none";
+
+    if (endpointHelpText) {
+      endpointHelpText.textContent = isMistral
+        ? "Default endpoint: https://api.mistral.ai"
+        : "Default ports: Ollama (11434), llama.cpp (8080), LM Studio (1234)";
+    }
+  }
+
+  async function refreshMistralKeyStatus() {
+    const hasSavedKey = Boolean(await getMistralApiKey());
+    mistralKeyStatus.textContent = hasSavedKey
+      ? "API key saved securely"
+      : "No key saved";
+    clearMistralKeyBtn.disabled = !hasSavedKey;
+  }
+
+  async function openSettingsModal() {
+    const backend = userSettings.backend || "ollama";
+
+    backendSelect.value = backend;
     endpointInput.value =
       userSettings.endpoint ||
-      BACKEND_DEFAULTS[userSettings.backend || "ollama"].endpoint;
+      (BACKEND_DEFAULTS[backend] || BACKEND_DEFAULTS.ollama).endpoint;
     modelSelect.value = userSettings.model;
     usernameInput.value = userSettings.username;
     systemPromptInput.value = userSettings.systemPrompt;
+    mistralApiKeyInput.value = "";
+
+    updateSettingsUiForBackend(backend);
+    await refreshMistralKeyStatus();
+
     settingsModal.classList.add("active");
+  }
+
+  // Update endpoint when backend changes
+  backendSelect.addEventListener("change", async () => {
+    const backend = backendSelect.value;
+    const defaultEndpoint = (
+      BACKEND_DEFAULTS[backend] || BACKEND_DEFAULTS.ollama
+    ).endpoint;
+    endpointInput.value = defaultEndpoint;
+    updateSettingsUiForBackend(backend);
+
+    // Allow previewing model list per selected backend before saving settings
+    await fetchAvailableModels(backend, defaultEndpoint);
+  });
+
+  settingsBtn.addEventListener("click", openSettingsModal);
+
+  clearMistralKeyBtn.addEventListener("click", async () => {
+    try {
+      await deleteSecureValue(MISTRAL_API_KEY_SECRET);
+      mistralApiKeyInput.value = "";
+      await refreshMistralKeyStatus();
+    } catch (error) {
+      alert(error.message || "Failed to clear Mistral API key.");
+    }
   });
 
   modalClose.addEventListener("click", () => {
@@ -1238,16 +1404,34 @@ document.addEventListener("DOMContentLoaded", () => {
     settingsModal.classList.remove("active");
   });
 
-  saveSettingsBtn.addEventListener("click", () => {
-    userSettings.backend = backendSelect.value;
-    userSettings.endpoint = endpointInput.value.trim();
-    userSettings.model = modelSelect.value;
-    userSettings.username = usernameInput.value.trim();
-    userSettings.systemPrompt = systemPromptInput.value.trim();
-    saveSettings(userSettings);
-    settingsModal.classList.remove("active");
-    // Refresh models after backend change
-    fetchAvailableModels();
+  saveSettingsBtn.addEventListener("click", async () => {
+    try {
+      const selectedBackend = backendSelect.value;
+
+      userSettings.backend = backendSelect.value;
+      userSettings.endpoint = endpointInput.value.trim();
+      userSettings.model = modelSelect.value;
+      userSettings.username = usernameInput.value.trim();
+      userSettings.systemPrompt = systemPromptInput.value.trim();
+
+      const newMistralKey = mistralApiKeyInput.value.trim();
+      if (newMistralKey) {
+        await setSecureValue(MISTRAL_API_KEY_SECRET, newMistralKey);
+        mistralApiKeyInput.value = "";
+      }
+
+      saveSettings(userSettings);
+      settingsModal.classList.remove("active");
+
+      if (selectedBackend === "mistral") {
+        await refreshMistralKeyStatus();
+      }
+
+      // Refresh models after backend change
+      await fetchAvailableModels();
+    } catch (error) {
+      alert(error.message || "Failed to save settings.");
+    }
   });
 
   // Close modal when clicking outside
