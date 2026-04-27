@@ -280,6 +280,11 @@
       const text = String(userMessage || "").toLowerCase();
       if (!text) return false;
 
+      // Trigger tool mode whenever user provides an absolute Unix path.
+      if (/(^|\s)\/[\w./-]+/.test(text)) {
+        return true;
+      }
+
       return [
         /\bweather\b/,
         /\btemperature\b/,
@@ -291,12 +296,20 @@
         /\babsolute\s+path\b/,
         /\bread\b.*\bfile\b/,
         /\bread\b.*\bpath\b/,
+        /\bfind\b.*\bfiles?\b/,
         /\bopen\b.*\bfile\b/,
         /\blist\b.*\bfiles?\b/,
+        /\bimportant\b.*\bfiles?\b/,
+        /\bkey\b.*\bfiles?\b/,
         /\blist\b.*\bpath\b/,
         /\bwrite\b.*\bfile\b/,
         /\bsave\b.*\bfile\b/,
         /\bappend\b.*\bfile\b/,
+        /\b(folder|directory)\b/,
+        /\bcodebase\b/,
+        /\brepository\b/,
+        /\bproject\b.*\bstructure\b/,
+        /\banaly[sz]e\b.*\b(codebase|project|repo|folder)\b/,
         /\bworkspace\b.*\bfiles?\b/,
         /\bshow\b.*\bfiles?\b/,
       ].some((pattern) => pattern.test(text));
