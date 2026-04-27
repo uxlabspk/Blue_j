@@ -20,6 +20,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
     delete: (key) => ipcRenderer.invoke("secure:delete", key),
   },
 
+  tools: {
+    listWorkspaceFiles: (options) =>
+      ipcRenderer.invoke("tools:listWorkspaceFiles", options),
+    readWorkspaceFile: (options) =>
+      ipcRenderer.invoke("tools:readWorkspaceFile", options),
+    listPath: (options) => ipcRenderer.invoke("tools:listPath", options),
+    readPath: (options) => ipcRenderer.invoke("tools:readPath", options),
+    writePath: (options) => ipcRenderer.invoke("tools:writePath", options),
+  },
+
   // Menu actions
   onNewChat: (callback) => {
     ipcRenderer.on("new-chat", callback);

@@ -180,6 +180,54 @@ document.addEventListener("DOMContentLoaded", () => {
     return new Error(`${fallbackMessage} (${status})`);
   }
 
+  const MODEL_REQUEST_TIMEOUT_MS = 180000;
+  const WEATHER_REQUEST_TIMEOUT_MS = 12000;
+
+  async function fetchWithTimeout(
+    url,
+    options = {},
+    timeoutMs = MODEL_REQUEST_TIMEOUT_MS,
+  ) {
+    const controller = new AbortController();
+    const parentSignal = options.signal;
+    let timedOut = false;
+
+    const relayAbort = () => controller.abort();
+    if (parentSignal) {
+      if (parentSignal.aborted) {
+        controller.abort();
+      } else {
+        parentSignal.addEventListener("abort", relayAbort, { once: true });
+      }
+    }
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
+
+    try {
+      return await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (timedOut) {
+        const timeoutError = new Error(
+          `Request timed out after ${Math.round(timeoutMs / 1000)}s`,
+        );
+        timeoutError.name = "TimeoutError";
+        throw timeoutError;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+      if (parentSignal) {
+        parentSignal.removeEventListener("abort", relayAbort);
+      }
+    }
+  }
+
   function extractContentFromChunkLine(line, backend) {
     const normalized = line.startsWith("data:") ? line.slice(5).trim() : line;
 
@@ -190,16 +238,184 @@ document.addEventListener("DOMContentLoaded", () => {
     const data = JSON.parse(normalized);
 
     if (backend === "ollama") {
-      // Ollama format: data.message.content
       return data.message?.content || "";
     }
 
-    // OpenAI-compatible streaming format
     return (
       data.choices?.[0]?.delta?.content ||
       data.choices?.[0]?.message?.content ||
       ""
     );
+  }
+
+  const TOOL_CALLING_MAX_STEPS = 4;
+
+  if (!window.ToolRegistry?.createToolRegistry) {
+    throw new Error("Tool registry script was not loaded");
+  }
+
+  const toolRegistry = window.ToolRegistry.createToolRegistry({
+    fetchWithTimeout,
+    buildHttpError,
+    weatherTimeoutMs: WEATHER_REQUEST_TIMEOUT_MS,
+  });
+
+  function getToolDefinitions() {
+    return toolRegistry.getToolDefinitions();
+  }
+
+  function normalizeToolCall(toolCall) {
+    const fn = toolCall?.function || {};
+    const name = fn.name || toolCall?.name;
+    const id =
+      toolCall?.id ||
+      `tool_call_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    let args = {};
+    const rawArgs = fn.arguments ?? toolCall?.arguments ?? "{}";
+    if (typeof rawArgs === "string") {
+      try {
+        args = JSON.parse(rawArgs || "{}");
+      } catch {
+        args = {};
+      }
+    } else if (rawArgs && typeof rawArgs === "object") {
+      args = rawArgs;
+    }
+
+    return { id, name, args };
+  }
+
+  async function runToolByName(name, args) {
+    return await toolRegistry.runToolByName(name, args);
+  }
+
+  async function requestNonStreamingChatCompletion(
+    backend,
+    messages,
+    tools,
+    signal,
+  ) {
+    const backendConfig = BACKEND_DEFAULTS[backend] || BACKEND_DEFAULTS.ollama;
+    const endpoint = getApiEndpoint(backendConfig.chatPath);
+    const headers = await getBackendHeaders(backend, true);
+
+    const requestBody = {
+      model: userSettings.model || "NeuralNexusLab/HacKing:latest",
+      messages,
+      stream: false,
+      tools,
+    };
+
+    if (backend !== "ollama") {
+      requestBody.tool_choice = "auto";
+    }
+
+    const response = await fetchWithTimeout(
+      endpoint,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify(requestBody),
+        signal,
+      },
+      MODEL_REQUEST_TIMEOUT_MS,
+    );
+
+    if (!response.ok) {
+      throw await buildHttpError(response, "Request failed");
+    }
+
+    const data = await response.json();
+    const assistantMessage =
+      backend === "ollama"
+        ? data?.message || { role: "assistant", content: data?.response || "" }
+        : data?.choices?.[0]?.message || { role: "assistant", content: "" };
+
+    return assistantMessage;
+  }
+
+  function toTextContent(value) {
+    if (typeof value === "string") {
+      return value;
+    }
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+
+  function shouldUseToolCalling(userMessage) {
+    return toolRegistry.shouldUseToolCalling(userMessage);
+  }
+
+  async function requestStreamingChatCompletion(backend, messages, signal) {
+    const backendConfig = BACKEND_DEFAULTS[backend] || BACKEND_DEFAULTS.ollama;
+    const endpoint = getApiEndpoint(backendConfig.chatPath);
+    const headers = await getBackendHeaders(backend, true);
+
+    const requestBody = {
+      model: userSettings.model || "NeuralNexusLab/HacKing:latest",
+      messages,
+      stream: true,
+    };
+
+    const response = await fetchWithTimeout(
+      endpoint,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify(requestBody),
+        signal,
+      },
+      MODEL_REQUEST_TIMEOUT_MS,
+    );
+
+    if (!response.ok) {
+      throw await buildHttpError(response, "Request failed");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let pendingChunk = "";
+    let fullResponse = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      pendingChunk += decoder.decode(value, { stream: true });
+      const lines = pendingChunk.split("\n");
+      pendingChunk = lines.pop() || "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const content = extractContentFromChunkLine(trimmed, backend);
+          if (content) {
+            fullResponse += content;
+          }
+        } catch {
+          // Ignore malformed stream line and continue.
+        }
+      }
+    }
+
+    const finalLine = pendingChunk.trim();
+    if (finalLine) {
+      try {
+        const content = extractContentFromChunkLine(finalLine, backend);
+        if (content) {
+          fullResponse += content;
+        }
+      } catch {
+        // Ignore malformed final line.
+      }
+    }
+
+    return fullResponse;
   }
 
   // Fetch available models from backend
@@ -944,97 +1160,119 @@ document.addEventListener("DOMContentLoaded", () => {
       });
 
       const backend = userSettings.backend || "ollama";
-      const backendConfig =
-        BACKEND_DEFAULTS[backend] || BACKEND_DEFAULTS.ollama;
-      const chatPath = backendConfig.chatPath;
-      const endpoint = getApiEndpoint(chatPath);
-      const headers = await getBackendHeaders(backend, true);
-
-      const requestBody = {
-        model: userSettings.model || "NeuralNexusLab/HacKing:latest",
-        messages: messages,
-        stream: true,
-      };
-
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(requestBody),
-        signal: abortController.signal,
-      });
-
-      if (!response.ok) {
-        throw await buildHttpError(response, "Request failed");
-      }
-
-      // Remove typing indicator
-      typingIndicator.parentElement.parentElement.remove();
-
-      // Create new message for streaming content
-      const contentDiv = createMessageElement("assistant");
+      const tools = getToolDefinitions();
+      const baseMessages = [...messages];
       let fullResponse = "";
+      let toolModeFailed = false;
+      const useToolCalling = shouldUseToolCalling(message);
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let pendingChunk = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-
-        if (done) break;
-
-        pendingChunk += decoder.decode(value, { stream: true });
-        const lines = pendingChunk.split("\n");
-        pendingChunk = lines.pop() || "";
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed) continue;
-
-          try {
-            const backend = userSettings.backend || "ollama";
-            const content = extractContentFromChunkLine(trimmed, backend);
-
-            if (content) {
-              fullResponse += content;
-              contentDiv.innerHTML = marked.parse(fullResponse);
-              messagesContainer.scrollTop = messagesContainer.scrollHeight;
-            }
-          } catch (e) {
-            console.warn("Failed to parse stream line:", trimmed);
-          }
-        }
-      }
-
-      // Flush any remaining partial line after stream completion
-      const finalLine = pendingChunk.trim();
-      if (finalLine) {
+      if (useToolCalling) {
         try {
-          const backend = userSettings.backend || "ollama";
-          const content = extractContentFromChunkLine(finalLine, backend);
-          if (content) {
-            fullResponse += content;
-            contentDiv.innerHTML = marked.parse(fullResponse);
+          for (let step = 0; step < TOOL_CALLING_MAX_STEPS; step++) {
+            const assistantMessage = await requestNonStreamingChatCompletion(
+              backend,
+              messages,
+              tools,
+              abortController.signal,
+            );
+
+            const toolCalls = Array.isArray(assistantMessage?.tool_calls)
+              ? assistantMessage.tool_calls
+              : [];
+
+            if (toolCalls.length === 0) {
+              fullResponse = toTextContent(assistantMessage?.content || "");
+              break;
+            }
+
+            messages.push({
+              role: "assistant",
+              content: assistantMessage?.content || "",
+              tool_calls: toolCalls,
+            });
+
+            for (const rawToolCall of toolCalls) {
+              const normalizedToolCall = normalizeToolCall(rawToolCall);
+              let resultPayload;
+
+              try {
+                const result = await runToolByName(
+                  normalizedToolCall.name,
+                  normalizedToolCall.args,
+                );
+                resultPayload = {
+                  ok: true,
+                  tool: normalizedToolCall.name,
+                  result,
+                };
+              } catch (error) {
+                resultPayload = {
+                  ok: false,
+                  tool: normalizedToolCall.name,
+                  error: error?.message || String(error),
+                };
+              }
+
+              const toolResultText = JSON.stringify(resultPayload);
+              const toolMessage = {
+                role: "tool",
+                name: normalizedToolCall.name,
+                content: toolResultText,
+              };
+
+              if (backend !== "ollama") {
+                toolMessage.tool_call_id = normalizedToolCall.id;
+              }
+
+              messages.push(toolMessage);
+            }
           }
-        } catch (e) {
-          console.warn("Failed to parse final stream line:", finalLine);
+        } catch (error) {
+          if (error?.name === "AbortError") {
+            throw error;
+          }
+          toolModeFailed = true;
+          console.warn(
+            "Tool mode failed, falling back to streaming mode:",
+            error,
+          );
         }
       }
 
       if (!fullResponse.trim()) {
-        contentDiv.parentElement?.parentElement?.remove();
+        if (useToolCalling && !toolModeFailed) {
+          console.warn(
+            "Tool mode returned no final answer, falling back to streaming mode.",
+          );
+        }
+        fullResponse = await requestStreamingChatCompletion(
+          backend,
+          baseMessages,
+          abortController.signal,
+        );
+      }
+
+      if (!fullResponse.trim()) {
         throw new Error(
           "No response content received. Check your selected model and backend settings.",
         );
       }
 
+      // Remove typing indicator
+      typingIndicator.parentElement.parentElement.remove();
+
+      // Render final assistant response
+      const contentDiv = createMessageElement("assistant");
+      contentDiv.innerHTML = marked.parse(fullResponse);
+
       // Calculate statistics
       const endTime = Date.now();
-      const duration = ((endTime - startTime) / 1000).toFixed(2);
+      const durationSeconds = Math.max((endTime - startTime) / 1000, 0.01);
+      const duration = durationSeconds.toFixed(2);
       const tokenCount = estimateTokenCount(fullResponse);
-      const tokensPerSecond = (tokenCount / parseFloat(duration)).toFixed(2);
+      const tokensPerSecond = (tokenCount / durationSeconds).toFixed(2);
 
-      // Add copy buttons after streaming is complete
+      // Add copy buttons and message actions after final content is rendered.
       addCopyButtons(contentDiv);
       const actionsDiv = addMessageActions(contentDiv, fullResponse);
 

@@ -13,8 +13,42 @@ const { spawn } = require("child_process");
 const fs = require("fs");
 
 const store = new Store();
+const PROJECT_ROOT = path.resolve(__dirname, "../../");
 
 let mainWindow;
+
+function resolveWorkspacePath(relativePath = ".") {
+  const resolved = path.resolve(PROJECT_ROOT, relativePath);
+  const rootWithSep = PROJECT_ROOT.endsWith(path.sep)
+    ? PROJECT_ROOT
+    : `${PROJECT_ROOT}${path.sep}`;
+
+  if (resolved !== PROJECT_ROOT && !resolved.startsWith(rootWithSep)) {
+    throw new Error("Path is outside the workspace root");
+  }
+
+  return resolved;
+}
+
+function resolveTargetPath(inputPath = ".") {
+  if (typeof inputPath !== "string" || !inputPath.trim()) {
+    throw new Error("A non-empty path string is required");
+  }
+
+  const trimmed = inputPath.trim();
+  if (path.isAbsolute(trimmed)) {
+    return path.normalize(trimmed);
+  }
+
+  return path.resolve(PROJECT_ROOT, trimmed);
+}
+
+function normalizeReadRange(startLine, endLine, maxLines = 400) {
+  const start = Math.max(1, Number.isFinite(startLine) ? startLine : 1);
+  const safeEnd = Number.isFinite(endLine) ? endLine : start + maxLines - 1;
+  const end = Math.max(start, Math.min(safeEnd, start + maxLines - 1));
+  return { start, end };
+}
 
 // Create the browser window
 function createWindow() {
@@ -166,6 +200,176 @@ ipcMain.handle("dialog:openFile", async () => {
     return filePaths;
   }
   return null;
+});
+
+// IPC Handlers for local tools (workspace scoped)
+ipcMain.handle("tools:listWorkspaceFiles", async (event, options = {}) => {
+  const relativePath = options.relativePath || ".";
+  const target = resolveTargetPath(relativePath);
+  const maxEntries = Math.min(
+    Math.max(Number(options.maxEntries) || 100, 1),
+    500,
+  );
+
+  const stat = await fs.promises.stat(target);
+  if (!stat.isDirectory()) {
+    throw new Error("Target path is not a directory");
+  }
+
+  const entries = await fs.promises.readdir(target, { withFileTypes: true });
+  return entries.slice(0, maxEntries).map((entry) => ({
+    name: entry.name,
+    type: entry.isDirectory() ? "directory" : "file",
+    path: path.join(target, entry.name),
+    relativePath: path.relative(PROJECT_ROOT, path.join(target, entry.name)),
+  }));
+});
+
+ipcMain.handle("tools:listPath", async (event, options = {}) => {
+  const inputPath = options.path || options.relativePath || ".";
+  const maxEntries = Math.min(
+    Math.max(Number(options.maxEntries) || 100, 1),
+    500,
+  );
+  const target = resolveTargetPath(inputPath);
+
+  const stat = await fs.promises.stat(target);
+  if (!stat.isDirectory()) {
+    throw new Error("Target path is not a directory");
+  }
+
+  const entries = await fs.promises.readdir(target, { withFileTypes: true });
+  return entries.slice(0, maxEntries).map((entry) => ({
+    name: entry.name,
+    type: entry.isDirectory() ? "directory" : "file",
+    path: path.join(target, entry.name),
+    relativePath: path.relative(PROJECT_ROOT, path.join(target, entry.name)),
+  }));
+});
+
+ipcMain.handle("tools:readWorkspaceFile", async (event, options = {}) => {
+  const relativePath = options.relativePath;
+  if (!relativePath || typeof relativePath !== "string") {
+    throw new Error("A relativePath string is required");
+  }
+
+  const readResult = await (async () => {
+    const target = resolveTargetPath(relativePath);
+    const stat = await fs.promises.stat(target);
+    if (!stat.isFile()) {
+      throw new Error("Target path is not a file");
+    }
+
+    const { start, end } = normalizeReadRange(
+      Number(options.startLine),
+      Number(options.endLine),
+    );
+
+    const maxChars = Math.min(
+      Math.max(Number(options.maxChars) || 24000, 500),
+      60000,
+    );
+    const content = await fs.promises.readFile(target, "utf8");
+    const lines = content.split(/\r?\n/);
+    const selected = lines.slice(start - 1, end);
+
+    let sliced = selected.join("\n");
+    let truncated = false;
+    if (sliced.length > maxChars) {
+      sliced = `${sliced.slice(0, maxChars)}\n...[truncated]`;
+      truncated = true;
+    }
+
+    return {
+      path: target,
+      relativePath: path.relative(PROJECT_ROOT, target),
+      startLine: start,
+      endLine: Math.min(end, lines.length),
+      totalLines: lines.length,
+      truncated,
+      content: sliced,
+    };
+  })();
+
+  return readResult;
+});
+
+ipcMain.handle("tools:readPath", async (event, options = {}) => {
+  const inputPath = options.path || options.relativePath;
+  if (!inputPath || typeof inputPath !== "string") {
+    throw new Error("A path string is required");
+  }
+
+  const target = resolveTargetPath(inputPath);
+  const stat = await fs.promises.stat(target);
+  if (!stat.isFile()) {
+    throw new Error("Target path is not a file");
+  }
+
+  const { start, end } = normalizeReadRange(
+    Number(options.startLine),
+    Number(options.endLine),
+  );
+
+  const maxChars = Math.min(
+    Math.max(Number(options.maxChars) || 24000, 500),
+    60000,
+  );
+  const content = await fs.promises.readFile(target, "utf8");
+  const lines = content.split(/\r?\n/);
+  const selected = lines.slice(start - 1, end);
+
+  let sliced = selected.join("\n");
+  let truncated = false;
+  if (sliced.length > maxChars) {
+    sliced = `${sliced.slice(0, maxChars)}\n...[truncated]`;
+    truncated = true;
+  }
+
+  return {
+    path: target,
+    relativePath: path.relative(PROJECT_ROOT, target),
+    startLine: start,
+    endLine: Math.min(end, lines.length),
+    totalLines: lines.length,
+    truncated,
+    content: sliced,
+  };
+});
+
+ipcMain.handle("tools:writePath", async (event, options = {}) => {
+  const inputPath = options.path || options.relativePath;
+  const content = options.content;
+  const append = Boolean(options.append);
+  const createDirs = options.createDirs !== false;
+
+  if (!inputPath || typeof inputPath !== "string") {
+    throw new Error("A path string is required");
+  }
+
+  if (typeof content !== "string") {
+    throw new Error("content must be a string");
+  }
+
+  const target = resolveTargetPath(inputPath);
+  if (createDirs) {
+    await fs.promises.mkdir(path.dirname(target), { recursive: true });
+  }
+
+  if (append) {
+    await fs.promises.appendFile(target, content, "utf8");
+  } else {
+    await fs.promises.writeFile(target, content, "utf8");
+  }
+
+  const stat = await fs.promises.stat(target);
+  return {
+    ok: true,
+    path: target,
+    relativePath: path.relative(PROJECT_ROOT, target),
+    size: stat.size,
+    mode: append ? "append" : "write",
+  };
 });
 
 // IPC Handlers for store
