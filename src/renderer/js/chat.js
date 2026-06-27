@@ -350,7 +350,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return toolRegistry.shouldUseToolCalling(userMessage);
   }
 
-  async function requestStreamingChatCompletion(backend, messages, signal) {
+  async function requestStreamingChatCompletion(backend, messages, signal, onToken) {
     const backendConfig = BACKEND_DEFAULTS[backend] || BACKEND_DEFAULTS.ollama;
     const endpoint = getApiEndpoint(backendConfig.chatPath);
     const headers = await getBackendHeaders(backend, true);
@@ -396,6 +396,7 @@ document.addEventListener("DOMContentLoaded", () => {
           const content = extractContentFromChunkLine(trimmed, backend);
           if (content) {
             fullResponse += content;
+            if (onToken) onToken(content, fullResponse);
           }
         } catch {
           // Ignore malformed stream line and continue.
@@ -409,6 +410,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const content = extractContentFromChunkLine(finalLine, backend);
         if (content) {
           fullResponse += content;
+          if (onToken) onToken(content, fullResponse);
         }
       } catch {
         // Ignore malformed final line.
@@ -1245,11 +1247,73 @@ document.addEventListener("DOMContentLoaded", () => {
             "Tool mode returned no final answer, falling back to streaming mode.",
           );
         }
+
+        // Create the streaming message element upfront
+        const streamingContentDiv = createMessageElement("assistant");
+
         fullResponse = await requestStreamingChatCompletion(
           backend,
           baseMessages,
           abortController.signal,
+          (token, accumulated) => {
+            // Update the UI in real-time as tokens arrive
+            streamingContentDiv.innerHTML = marked.parse(accumulated);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+          },
         );
+
+        // Remove typing indicator
+        typingIndicator.parentElement.parentElement.remove();
+
+        // Finalize the streaming message with actions and stats
+        addCopyButtons(streamingContentDiv);
+        const actionsDiv = addMessageActions(streamingContentDiv, fullResponse);
+
+        const endTime = Date.now();
+        const durationSeconds = Math.max((endTime - startTime) / 1000, 0.01);
+        const duration = durationSeconds.toFixed(2);
+        const tokenCount = estimateTokenCount(fullResponse);
+        const tokensPerSecond = (tokenCount / durationSeconds).toFixed(2);
+
+        addStatsDisplay(
+          streamingContentDiv,
+          {
+            tokens: tokenCount,
+            tokensPerSecond: tokensPerSecond,
+            duration: duration,
+          },
+          actionsDiv,
+        );
+
+        saveMessage("assistant", fullResponse);
+      } else {
+        // Remove typing indicator (tool calling path)
+        typingIndicator.parentElement.parentElement.remove();
+
+        // Render final assistant response from tool calling
+        const contentDiv = createMessageElement("assistant");
+        contentDiv.innerHTML = marked.parse(fullResponse);
+
+        const endTime = Date.now();
+        const durationSeconds = Math.max((endTime - startTime) / 1000, 0.01);
+        const duration = durationSeconds.toFixed(2);
+        const tokenCount = estimateTokenCount(fullResponse);
+        const tokensPerSecond = (tokenCount / durationSeconds).toFixed(2);
+
+        addCopyButtons(contentDiv);
+        const actionsDiv = addMessageActions(contentDiv, fullResponse);
+
+        addStatsDisplay(
+          contentDiv,
+          {
+            tokens: tokenCount,
+            tokensPerSecond: tokensPerSecond,
+            duration: duration,
+          },
+          actionsDiv,
+        );
+
+        saveMessage("assistant", fullResponse);
       }
 
       if (!fullResponse.trim()) {
@@ -1257,38 +1321,6 @@ document.addEventListener("DOMContentLoaded", () => {
           "No response content received. Check your selected model and backend settings.",
         );
       }
-
-      // Remove typing indicator
-      typingIndicator.parentElement.parentElement.remove();
-
-      // Render final assistant response
-      const contentDiv = createMessageElement("assistant");
-      contentDiv.innerHTML = marked.parse(fullResponse);
-
-      // Calculate statistics
-      const endTime = Date.now();
-      const durationSeconds = Math.max((endTime - startTime) / 1000, 0.01);
-      const duration = durationSeconds.toFixed(2);
-      const tokenCount = estimateTokenCount(fullResponse);
-      const tokensPerSecond = (tokenCount / durationSeconds).toFixed(2);
-
-      // Add copy buttons and message actions after final content is rendered.
-      addCopyButtons(contentDiv);
-      const actionsDiv = addMessageActions(contentDiv, fullResponse);
-
-      // Add statistics display with action buttons
-      addStatsDisplay(
-        contentDiv,
-        {
-          tokens: tokenCount,
-          tokensPerSecond: tokensPerSecond,
-          duration: duration,
-        },
-        actionsDiv,
-      );
-
-      // Save the full assistant response
-      saveMessage("assistant", fullResponse);
     } catch (error) {
       if (error.name === "AbortError") {
         typingIndicator.parentElement?.parentElement?.remove();
