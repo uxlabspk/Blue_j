@@ -31,6 +31,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let abortController = null;
   let currentChatId = null;
   let attachedFiles = [];
+  let videoMode = false;
 
   // ===== Conversation Storage =====
   const STORAGE_KEY = "ollama_conversations";
@@ -382,6 +383,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let fullResponse = "";
 
     while (true) {
+      if (signal?.aborted) break;
       const { done, value } = await reader.read();
       if (done) break;
 
@@ -390,6 +392,7 @@ document.addEventListener("DOMContentLoaded", () => {
       pendingChunk = lines.pop() || "";
 
       for (const line of lines) {
+        if (signal?.aborted) break;
         const trimmed = line.trim();
         if (!trimmed) continue;
         try {
@@ -656,9 +659,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // ===== Tools Dropdown =====
   const toolsBtn = document.getElementById("tools-btn");
   const toolsDropdown = document.getElementById("tools-dropdown");
-  const dropdownPresentationBtn = document.getElementById(
-    "dropdown-presentation-btn",
-  );
   const dropdownAttachBtn = document.getElementById("dropdown-attach-btn");
   const dropdownVideoBtn = document.getElementById("dropdown-video-btn");
 
@@ -695,15 +695,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
       videoMode = !videoMode;
       dropdownVideoBtn.classList.toggle("active", videoMode);
-
-      // Deactivate canvas mode when switching to video mode
-      if (videoMode && canvasMode) {
-        canvasMode = false;
-        if (dropdownPresentationBtn)
-          dropdownPresentationBtn.classList.remove("active");
-        if (canvasBtn) canvasBtn.classList.remove("active");
-        currentPresentationPath = null;
-      }
 
       if (videoMode) {
         messageInput.placeholder =
@@ -835,13 +826,28 @@ document.addEventListener("DOMContentLoaded", () => {
     return contentDiv;
   }
 
+  function sanitizeHTML(html) {
+    const tmp = document.createElement("div");
+    tmp.innerHTML = html;
+    tmp.querySelectorAll("script,iframe,object,embed,form,input,button,textarea,select").forEach((el) => el.remove());
+    tmp.querySelectorAll("*").forEach((el) => {
+      for (const attr of [...el.attributes]) {
+        if (attr.name.startsWith("on")) el.removeAttribute(attr.name);
+      }
+    });
+    return tmp.innerHTML;
+  }
+
   function addMessage(message, sender, persist = true) {
     const contentDiv = createMessageElement(sender);
 
     if (sender === "assistant") {
-      contentDiv.innerHTML = marked.parse(message);
+      const rendered = sanitizeHTML(marked.parse(message));
+      contentDiv.innerHTML = rendered;
       addCopyButtons(contentDiv);
-      addMessageActions(contentDiv, message);
+      renderInlineVisuals(contentDiv);
+      const actionsDiv = addMessageActions(contentDiv, message);
+      contentDiv.appendChild(actionsDiv);
     } else {
       contentDiv.textContent = message;
     }
@@ -877,6 +883,80 @@ document.addEventListener("DOMContentLoaded", () => {
         </button>
       `;
       pre.insertBefore(header, pre.firstChild);
+    });
+  }
+
+  const VISUAL_LANGS = new Set(["html", "htm", "svg", "css"]);
+  const VISUAL_LIVE_LANGS = new Set(["html", "htm", "javascript", "js", "css"]);
+
+  function renderInlineVisuals(container) {
+    container.querySelectorAll("pre").forEach((pre) => {
+      if (pre.dataset.visualRendered) return;
+
+      const code = pre.querySelector("code");
+      if (!code) return;
+
+      const lang = [...code.classList]
+        .find((c) => c.startsWith("language-"))
+        ?.replace("language-", "") || "";
+
+      const isVisualLang = VISUAL_LANGS.has(lang);
+      const isLiveLang = VISUAL_LIVE_LANGS.has(lang);
+      if (!isVisualLang && !isLiveLang) return;
+
+      const rawCode = code.textContent;
+      pre.dataset.visualRendered = "true";
+
+      const wrapper = document.createElement("div");
+      wrapper.className = "visual-wrapper";
+      pre.parentNode.insertBefore(wrapper, pre);
+
+      const toggleBtn = document.createElement("button");
+      toggleBtn.className = "visual-toggle";
+      toggleBtn.textContent = "Code";
+      toggleBtn.addEventListener("click", () => {
+        const showing = pre.style.display !== "none";
+        pre.style.display = showing ? "none" : "";
+        preview.style.display = showing ? "" : "none";
+        toggleBtn.textContent = showing ? "Preview" : "Code";
+      });
+
+      let html, css, js;
+      if (isVisualLang) {
+        html = rawCode;
+      } else {
+        const parts = { html: "", css: "", js: "" };
+        const fenceRe = /```(\w*)\n([\s\S]*?)```/g;
+        let m;
+        while ((m = fenceRe.exec(rawCode))) {
+          const blockLang = m[1].toLowerCase();
+          const blockCode = m[2];
+          if (blockLang === "html" || blockLang === "htm") parts.html += blockCode;
+          else if (blockLang === "css") parts.css += blockCode;
+          else if (blockLang === "javascript" || blockLang === "js") parts.js += blockCode;
+        }
+        if (!parts.css && !parts.js && !parts.html) {
+          parts.html = rawCode;
+        }
+        html = parts.html;
+        css = parts.css;
+        js = parts.js;
+      }
+
+      const doc = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:16px;font:14px/1.5 system-ui,sans-serif;color:#222;}${css || ""}</style></head><body>${html || ""}<script>${js || ""}<\/script></body></html>`;
+
+      const preview = document.createElement("div");
+      preview.className = "visual-preview";
+      const iframe = document.createElement("iframe");
+      iframe.sandbox = "allow-scripts";
+      iframe.setAttribute("loading", "lazy");
+      iframe.srcdoc = doc;
+      preview.appendChild(iframe);
+
+      wrapper.appendChild(toggleBtn);
+      wrapper.appendChild(preview);
+      wrapper.appendChild(pre);
+      pre.style.display = "none";
     });
   }
 
@@ -1257,7 +1337,7 @@ document.addEventListener("DOMContentLoaded", () => {
           abortController.signal,
           (token, accumulated) => {
             // Update the UI in real-time as tokens arrive
-            streamingContentDiv.innerHTML = marked.parse(accumulated);
+            streamingContentDiv.innerHTML = sanitizeHTML(marked.parse(accumulated));
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
           },
         );
@@ -1267,6 +1347,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Finalize the streaming message with actions and stats
         addCopyButtons(streamingContentDiv);
+        renderInlineVisuals(streamingContentDiv);
         const actionsDiv = addMessageActions(streamingContentDiv, fullResponse);
 
         const endTime = Date.now();
@@ -1292,7 +1373,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Render final assistant response from tool calling
         const contentDiv = createMessageElement("assistant");
-        contentDiv.innerHTML = marked.parse(fullResponse);
+        contentDiv.innerHTML = sanitizeHTML(marked.parse(fullResponse));
 
         const endTime = Date.now();
         const durationSeconds = Math.max((endTime - startTime) / 1000, 0.01);
@@ -1301,6 +1382,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const tokensPerSecond = (tokenCount / durationSeconds).toFixed(2);
 
         addCopyButtons(contentDiv);
+        renderInlineVisuals(contentDiv);
         const actionsDiv = addMessageActions(contentDiv, fullResponse);
 
         addStatsDisplay(
@@ -1390,7 +1472,7 @@ document.addEventListener("DOMContentLoaded", () => {
       fileData.displayType = "PDF";
     } else if (
       file.type === "text/plain" ||
-      file.name.toLowerCase().match(/\\.(txt|text)$/)
+      file.name.toLowerCase().match(/\.(txt|text)$/)
     ) {
       fileData.content = await readTextFile(file);
       fileData.displayType = "Text";

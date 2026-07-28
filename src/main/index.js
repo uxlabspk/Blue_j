@@ -9,7 +9,6 @@ const {
 } = require("electron");
 const path = require("path");
 const Store = require("electron-store");
-const { spawn } = require("child_process");
 const fs = require("fs");
 
 const store = new Store();
@@ -205,7 +204,7 @@ ipcMain.handle("dialog:openFile", async () => {
 // IPC Handlers for local tools (workspace scoped)
 ipcMain.handle("tools:listWorkspaceFiles", async (event, options = {}) => {
   const relativePath = options.relativePath || ".";
-  const target = resolveTargetPath(relativePath);
+  const target = resolveWorkspacePath(relativePath);
   const maxEntries = Math.min(
     Math.max(Number(options.maxEntries) || 100, 1),
     500,
@@ -254,7 +253,7 @@ ipcMain.handle("tools:readWorkspaceFile", async (event, options = {}) => {
   }
 
   const readResult = await (async () => {
-    const target = resolveTargetPath(relativePath);
+    const target = resolveWorkspacePath(relativePath);
     const stat = await fs.promises.stat(target);
     if (!stat.isFile()) {
       throw new Error("Target path is not a file");

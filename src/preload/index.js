@@ -33,9 +33,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Menu actions
   onNewChat: (callback) => {
     ipcRenderer.on("new-chat", callback);
+    return () => ipcRenderer.removeListener("new-chat", callback);
   },
   onOpenSettings: (callback) => {
     ipcRenderer.on("open-settings", callback);
+    return () => ipcRenderer.removeListener("open-settings", callback);
   },
 
   // Platform info
